@@ -7,6 +7,10 @@ const env = require('./env');
  * Shared connection pool. Every query in the app goes through here and always
  * uses parameterised statements / placeholders, which is what protects the
  * application from SQL injection.
+ *
+ * The pool is created lazily, so importing this module never opens a socket.
+ * That matters on a serverless runtime: nothing should connect until a request
+ * actually needs the database.
  */
 const pool = mysql.createPool({
   host: env.db.host,
@@ -21,7 +25,19 @@ const pool = mysql.createPool({
   dateStrings: false,
   enableKeepAlive: true,
   multipleStatements: false, // hard protection against stacked-query injection
+  ...(env.db.ssl ? { ssl: env.db.ssl } : {}),
 });
+
+/**
+ * Verifies that the database is actually reachable. Used by the health probe
+ * and at startup rather than on every request, because opening a connection per
+ * request would exhaust a serverless pool for no benefit.
+ */
+async function connectDB() {
+  const connection = await pool.getConnection();
+  connection.release();
+  return true;
+}
 
 async function query(sql, params = []) {
   const [rows] = await pool.execute(sql, params);
@@ -54,4 +70,4 @@ async function healthCheck() {
   return row && row.ok === 1;
 }
 
-module.exports = { pool, query, queryOne, transaction, healthCheck };
+module.exports = { pool, query, queryOne, transaction, healthCheck, connectDB };

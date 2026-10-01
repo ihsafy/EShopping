@@ -1,21 +1,8 @@
 'use strict';
 
 const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
-const crypto = require('crypto');
-const env = require('../config/env');
 const ApiError = require('../utils/ApiError');
-
-// Runs at import time. A read-only or otherwise unusable directory must not
-// take the whole API down with it, so this warns and lets multer surface a
-// per-request error instead of crashing every route during a cold start.
-try {
-  fs.mkdirSync(env.uploadDir, { recursive: true });
-} catch (error) {
-  console.error(`[uploads] Cannot create ${env.uploadDir}: ${error.message}`);
-  console.error('[uploads] Image uploads will fail. Set UPLOAD_DIR to a writable location.\n');
-}
+const { storeRequestFiles } = require('../services/fileStorage');
 
 const ALLOWED = {
   'image/jpeg': '.jpg',
@@ -25,16 +12,14 @@ const ALLOWED = {
   'image/avif': '.avif',
 };
 
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, env.uploadDir),
-  filename: (req, file, cb) => {
-    const ext = ALLOWED[file.mimetype] || path.extname(file.originalname).toLowerCase() || '.jpg';
-    cb(null, `${Date.now()}-${crypto.randomBytes(6).toString('hex')}${ext}`);
-  },
-});
-
+/**
+ * Files are buffered in memory and then handed to the storage service, which
+ * writes them to Cloudinary in production and to local disk in development.
+ * Nothing is written to disk by multer itself, so the same middleware works on
+ * a read-only serverless filesystem.
+ */
 const upload = multer({
-  storage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 4 * 1024 * 1024, files: 8 },
   fileFilter: (req, file, cb) => {
     if (!ALLOWED[file.mimetype]) {
@@ -55,4 +40,15 @@ const handleUpload = (middleware) => (req, res, next) =>
     return next(err);
   });
 
-module.exports = { upload, handleUpload };
+/**
+ * Runs after multer has populated req.files: persists every buffer and records
+ * the resulting public URL on each file as `file.url`.
+ */
+const persistUploads = (req, res, next) => {
+  storeRequestFiles(req)
+    .then(() => next())
+    // storeRequestFiles already converts storage failures into an ApiError.
+    .catch(next);
+};
+
+module.exports = { upload, handleUpload, persistUploads };

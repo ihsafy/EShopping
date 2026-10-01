@@ -2,7 +2,7 @@
 
 const express = require('express');
 const { protect, requireRole } = require('../middleware/auth');
-const { handleUpload, upload } = require('../middleware/upload');
+const { handleUpload, upload, persistUploads } = require('../middleware/upload');
 const { validate } = require('../middleware/validate');
 const dashboard = require('../controllers/admin/dashboard.controller');
 const productAdmin = require('../controllers/admin/product.controller');
@@ -28,6 +28,7 @@ router.get('/products/:id', productAdmin.detail);
 router.post(
   '/products',
   handleUpload(upload.array('images', 8)),
+  persistUploads,
   validate({
     body: {
       name: [['required'], ['max', 200]],
@@ -37,7 +38,7 @@ router.post(
   }),
   productAdmin.create
 );
-router.put('/products/:id', handleUpload(upload.array('images', 8)), productAdmin.update);
+router.put('/products/:id', handleUpload(upload.array('images', 8)), persistUploads, productAdmin.update);
 router.delete('/products/:id', productAdmin.remove);
 router.post(
   '/products/:id/status',
@@ -104,10 +105,16 @@ router.get('/banners', contentAdmin.listBanners);
 router.post(
   '/banners',
   handleUpload(upload.fields([{ name: 'image', maxCount: 1 }, { name: 'mobileImage', maxCount: 1 }])),
+  persistUploads,
   validate({ body: { title: [['required'], ['max', 200]] } }),
   contentAdmin.createBanner
 );
-router.put('/banners/:id', handleUpload(upload.fields([{ name: 'image', maxCount: 1 }, { name: 'mobileImage', maxCount: 1 }])), contentAdmin.updateBanner);
+router.put(
+  '/banners/:id',
+  handleUpload(upload.fields([{ name: 'image', maxCount: 1 }, { name: 'mobileImage', maxCount: 1 }])),
+  persistUploads,
+  contentAdmin.updateBanner
+);
 router.delete('/banners/:id', contentAdmin.removeBanner);
 
 // ---- coupons ---------------------------------------------------------------

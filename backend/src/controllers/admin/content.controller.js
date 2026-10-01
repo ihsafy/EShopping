@@ -79,8 +79,12 @@ const markRead = asyncHandler(async (req, res) => {
 const withUploadedFiles = (req) => {
   const body = { ...req.body };
   const files = req.files || {};
-  if (files.image && files.image[0]) body.imageUrl = `/uploads/${files.image[0].filename}`;
-  if (files.mobileImage && files.mobileImage[0]) body.mobileImageUrl = `/uploads/${files.mobileImage[0].filename}`;
+  // file.url is set by persistUploads: a Cloudinary https URL in production,
+  // or a /uploads/... path when running against local disk.
+  if (files.image && files.image[0] && files.image[0].url) body.imageUrl = files.image[0].url;
+  if (files.mobileImage && files.mobileImage[0] && files.mobileImage[0].url) {
+    body.mobileImageUrl = files.mobileImage[0].url;
+  }
   return body;
 };
 

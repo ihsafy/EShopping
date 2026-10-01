@@ -19,6 +19,18 @@ function toDiskPath(url) {
   return path.join(env.uploadDir, name);
 }
 
+/**
+ * Pulls the Cloudinary public_id back out of a delivery URL, e.g.
+ * https://res.cloudinary.com/<cloud>/image/upload/v123/eshopping/abc.jpg
+ * -> eshopping/abc
+ */
+function toCloudinaryPublicId(url) {
+  if (typeof url !== 'string' || !url.includes('res.cloudinary.com')) return null;
+  const match = url.match(/\/image\/upload\/(?:v\d+\/)?(.+?)(?:\.\w{2,5})?$/);
+  if (!match || !match[1]) return null;
+  return match[1];
+}
+
 async function isReferenced(url) {
   const checks = await Promise.all([
     queryOne('SELECT 1 AS hit FROM product_images WHERE image_url = ? LIMIT 1', [url]),
@@ -33,9 +45,20 @@ async function cleanupImages(urls) {
   const list = [...new Set((Array.isArray(urls) ? urls : [urls]).filter(Boolean))];
   for (const url of list) {
     try {
+      if (await isReferenced(url)) continue;
+
+      const publicId = toCloudinaryPublicId(url);
+      if (publicId) {
+        if (env.usesCloudinary) {
+          const { destroyCloudinaryImage } = require('./fileStorage');
+          // eslint-disable-next-line no-await-in-loop
+          await destroyCloudinaryImage(publicId);
+        }
+        continue;
+      }
+
       const disk = toDiskPath(url);
       if (!disk) continue;
-      if (await isReferenced(url)) continue;
       if (fs.existsSync(disk)) fs.unlinkSync(disk);
     } catch (err) {
       // Cleanup is best effort only.
@@ -49,4 +72,4 @@ function removedUrls(before = [], after = []) {
   return before.filter((url) => url && !keep.has(url));
 }
 
-module.exports = { cleanupImages, removedUrls };
+module.exports = { cleanupImages, removedUrls, toCloudinaryPublicId };

@@ -81,8 +81,13 @@ app.use(
   })
 );
 
-// Uploaded product/banner images are served straight from disk.
-app.use('/uploads', express.static(env.uploadDir, { maxAge: env.isProd ? '30d' : 0 }));
+// Uploaded product/banner images are served straight from disk. New uploads go
+// to Cloudinary in production, but rows created before that still point at
+// /uploads/<file>, so the bundled copy is mounted as well.
+app.use('/uploads', express.static(env.bundledUploadDir, { maxAge: env.isProd ? '30d' : 0 }));
+if (env.uploadDir !== env.bundledUploadDir) {
+  app.use('/uploads', express.static(env.uploadDir, { maxAge: env.isProd ? '30d' : 0 }));
+}
 
 app.get('/api/health', async (req, res) => {
   let database = 'down';

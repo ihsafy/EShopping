@@ -32,6 +32,10 @@ class ApiError extends Error {
   static tooMany(msg = 'Too many requests, please try again later') {
     return new ApiError(429, msg);
   }
+  /** A dependency (storage, third-party API) failed. The detail is logged, not returned. */
+  static internal(msg = 'Internal server error') {
+    return new ApiError(500, msg);
+  }
 }
 
 module.exports = ApiError;
