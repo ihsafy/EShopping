@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Helmet } from 'react-helmet-async';
 import toast from 'react-hot-toast';
+import { FiPackage } from 'react-icons/fi';
+import Button from '../../components/ui/Button';
+import EmptyState, { ErrorState } from '../../components/ui/EmptyState';
+import { SkeletonRow } from '../../components/ui/Skeleton';
 import { fetchAdminProducts, updateProduct, fetchAdminSettings, saveSettings } from '../../services/admin';
 import { formatPrice } from '../../utils/format';
 
@@ -106,12 +110,16 @@ export default function AdminFeatured() {
         </div>
       </div>
 
-      {error && (
-        <div className="alert alert--error">
+      {error && !settings && (
+        <ErrorState title="Could not load products" text={error} onRetry={load} retrying={loading} />
+      )}
+
+      {error && settings && (
+        <div className="alert alert-error" role="alert">
           {error}{' '}
-          <button type="button" className="admin-linkbtn" onClick={load}>
+          <Button variant="ghost" size="sm" onClick={load}>
             Try again
-          </button>
+          </Button>
         </div>
       )}
 
@@ -132,9 +140,9 @@ export default function AdminFeatured() {
             </div>
           ))}
           <div className="admin-field admin-field--action">
-            <button type="submit" className="btn btn--primary" disabled={savingLimits || !settings}>
+            <Button type="submit" variant="primary" loading={savingLimits} disabled={!settings}>
               {savingLimits ? 'Saving…' : 'Save limits'}
-            </button>
+            </Button>
           </div>
         </div>
       </form>
@@ -150,12 +158,21 @@ export default function AdminFeatured() {
       </div>
 
       {loading ? (
-        <p className="muted admin-page__loading">Loading products…</p>
-      ) : filtered.length === 0 ? (
-        <div className="admin-panel admin-empty">
-          <h2>No products match</h2>
-          <p className="muted">Add products first, then flag them here.</p>
+        <div className="admin-table-wrap">
+          <table className="admin-table admin-table--rows">
+            <tbody>
+              {Array.from({ length: 6 }, (_, i) => (
+                <SkeletonRow key={i} columns={5} />
+              ))}
+            </tbody>
+          </table>
         </div>
+      ) : filtered.length === 0 ? (
+        <EmptyState
+          icon={FiPackage}
+          title="No products match"
+          text="Add products first, then flag them here."
+        />
       ) : (
         <div className="admin-table-wrap">
           <table className="admin-table admin-table--rows">

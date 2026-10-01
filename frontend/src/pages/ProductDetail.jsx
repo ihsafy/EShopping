@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 import { FiHeart, FiMinus, FiPlus, FiShoppingCart, FiTruck, FiShield, FiRefreshCw } from 'react-icons/fi';
 import Stars from '../components/Stars';
 import SectionRow from '../components/SectionRow';
+import ProductGallery from '../components/ProductGallery';
 import { fetchProductDetail, fetchReviewEligibility, submitReview } from '../services/catalog';
 import { addToCart } from '../services/cart';
 import { addToWishlist } from '../services/wishlist';
@@ -20,7 +21,6 @@ export default function ProductDetail() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [qty, setQty] = useState(1);
-  const [activeImage, setActiveImage] = useState(0);
   const [busy, setBusy] = useState(false);
   const [eligibility, setEligibility] = useState(null);
   const [rating, setRating] = useState(5);
@@ -36,7 +36,6 @@ export default function ProductDetail() {
     setError('');
     setData(null);
     setQty(1);
-    setActiveImage(0);
 
     fetchProductDetail(slug)
       .then((d) => alive && setData(d))
@@ -152,7 +151,6 @@ export default function ProductDetail() {
   }
 
   const images = product.images?.length ? product.images : [{ image_url: product.image, alt_text: product.name }];
-  const currentImage = images[activeImage]?.image_url || product.image;
   const discount = discountPercent(product);
   const inStock = Number(product.stock) > 0;
   const reviews = data.reviews || { reviews: [], total: 0, average: 0, breakdown: {} };
@@ -180,25 +178,7 @@ export default function ProductDetail() {
       </nav>
 
       <div className="detail__grid">
-        <div className="detail__gallery">
-          <div className="detail__thumbs">
-            {images.map((img, index) => (
-              <button
-                type="button"
-                key={img.id || index}
-                className={`detail__thumb ${index === activeImage ? 'is-active' : ''}`}
-                onClick={() => setActiveImage(index)}
-                aria-label={`View image ${index + 1}`}
-              >
-                <img src={img.image_url} alt={img.alt_text || product.name} />
-              </button>
-            ))}
-          </div>
-          <div className="detail__main-image">
-            {discount > 0 && <span className="badge badge--discount">-{discount}%</span>}
-            <img src={currentImage} alt={product.name} />
-          </div>
-        </div>
+        <ProductGallery key={slug} images={images} alt={product.name} discount={discount} />
 
         <div className="detail__info">
           <div className="detail__meta">

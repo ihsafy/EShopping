@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Outlet, ScrollRestoration } from 'react-router-dom';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
+import PromoBar from '../components/PromoBar';
 import { AuthProvider } from '../context/AuthContext';
 import { fetchCategories, fetchStore } from '../services/catalog';
 
@@ -34,8 +35,11 @@ export default function RootLayout() {
     <AuthProvider>
       <div className="app">
         <ScrollRestoration />
+        <PromoBar />
         <Header store={store} categories={categories} />
-        <main className="main">
+        {/* tabIndex -1 so the skip link can move focus here on a real route
+            change without making the container a tab stop. */}
+        <main className="main" id="main" tabIndex={-1}>
           <Outlet context={{ store, categories }} />
         </main>
         <Footer store={store} />

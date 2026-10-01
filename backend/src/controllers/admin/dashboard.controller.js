@@ -1,22 +1,25 @@
 'use strict';
 
 const productModel = require('../../models/product');
-const categoryModel = require('../../models/category');
 const orderModel = require('../../models/order');
 const userModel = require('../../models/user');
-const { getNumber, getSettings } = require('../../services/settings');
+const { getNumber } = require('../../services/settings');
 const { query, queryOne } = require('../../config/db');
 const asyncHandler = require('../../utils/asyncHandler');
+const { ORDER_STATUSES, ORDER_STATUS_LABELS } = require('../../utils/helpers');
+
+/** SQL boolean for "this order still counts as revenue". */
+const countsAsRevenue = orderModel.NOT_CANCELLED_SQL;
 
 /** Reorders the home page sections based on admin config. */
 async function revenueByPeriod(period = 'all') {
   const ranges = {
-    today: ['DATE(created_at) = CURDATE()', 'all'],
-    week: ['created_at >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)', 'daily'],
-    '30d': ['created_at >= DATE_SUB(CURDATE(), INTERVAL 29 DAY)', 'daily'],
-    month: ['created_at >= DATE_FORMAT(CURDATE(), "%Y-%m-01")', 'daily'],
-    '6m': ['created_at >= DATE_SUB(CURDATE(), INTERVAL 5 MONTH)', 'monthly'],
-    year: ['YEAR(created_at) = YEAR(CURDATE())', 'monthly'],
+    today: ['DATE(o.created_at) = CURDATE()', 'daily'],
+    week: ['o.created_at >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)', 'daily'],
+    '30d': ['o.created_at >= DATE_SUB(CURDATE(), INTERVAL 29 DAY)', 'daily'],
+    month: ['o.created_at >= DATE_FORMAT(CURDATE(), "%Y-%m-01")', 'daily'],
+    '6m': ['o.created_at >= DATE_SUB(CURDATE(), INTERVAL 5 MONTH)', 'monthly'],
+    year: ['YEAR(o.created_at) = YEAR(CURDATE())', 'monthly'],
     all: ['1 = 1', 'monthly'],
   };
   const [condition, group] = ranges[period] || ranges.all;
@@ -29,40 +32,46 @@ async function revenueByPeriod(period = 'all') {
         COUNT(*) AS orders,
         COALESCE(SUM(o.total), 0) AS revenue
      FROM orders o
-     WHERE o.order_status <> 'cancelled' AND ${condition}
+     WHERE ${countsAsRevenue} AND ${condition}
      GROUP BY period ORDER BY period ASC`
   );
 }
 
 /** GET /api/admin/dashboard - KPI cards + headline chart series */
 const dashboard = asyncHandler(async (req, res) => {
-  const [revenue, statusCounts, productStats, customerStats, series, latestOrders] = await Promise.all([
-    queryOne(
-      `SELECT
-         COALESCE(SUM(CASE WHEN order_status <> 'cancelled' THEN total ELSE 0 END), 0) AS total_revenue,
-         COALESCE(SUM(CASE WHEN order_status <> 'cancelled' AND DATE(created_at) = CURDATE() THEN total ELSE 0 END), 0) AS today_revenue,
-         COALESCE(SUM(CASE WHEN order_status <> 'cancelled' AND created_at >= DATE_FORMAT(CURDATE(), '%Y-%m-01') THEN total ELSE 0 END), 0) AS month_revenue,
-         COUNT(*) AS total_orders,
-         COALESCE(SUM(CASE WHEN order_status = 'cancelled' THEN total ELSE 0 END), 0) AS cancelled_value
-       FROM orders`
-    ),
-    orderModel.countByStatus(),
-    productModel.stats(),
-    userModel.countCustomers(),
-    revenueByPeriod('month'),
-    orderModel.list({ page: 1, limit: 8 }),
-  ]);
+  // Resolved once (settings are cached server-side) so the low-stock query
+  // below can reuse the value instead of asking again.
+  const lowStockThreshold = Number(await getNumber('low_stock_threshold', 5));
 
-  const lowStockThreshold = await getNumber('low_stock_threshold', 5);
-  const lowStockRows = await query(
-    `SELECT id, name, slug, sku, stock, category_id FROM products
-     WHERE stock <= ? AND status = 'active' ORDER BY stock ASC, name ASC LIMIT 10`,
-    [lowStockThreshold]
-  );
+  const [revenue, statusBreakdown, productStats, customerStats, series, latestOrders, lowStockRows, outOfStock] =
+    await Promise.all([
+      queryOne(
+        `SELECT
+           COALESCE(SUM(CASE WHEN ${countsAsRevenue} THEN total ELSE 0 END), 0) AS total_revenue,
+           COALESCE(SUM(CASE WHEN ${countsAsRevenue} AND DATE(o.created_at) = CURDATE() THEN total ELSE 0 END), 0) AS today_revenue,
+           COALESCE(SUM(CASE WHEN ${countsAsRevenue} AND o.created_at >= DATE_FORMAT(CURDATE(), '%Y-%m-01') THEN total ELSE 0 END), 0) AS month_revenue,
+           COUNT(*) AS total_orders,
+           COALESCE(SUM(CASE WHEN NOT ${countsAsRevenue} THEN total ELSE 0 END), 0) AS cancelled_value
+         FROM orders o`
+      ),
+      // The real, normalised "orders by status" figures - no client-side
+      // guessing, and no extra round trip for the chart.
+      orderModel.statusBreakdown(),
+      productModel.stats(),
+      userModel.countCustomers(),
+      revenueByPeriod('month'),
+      orderModel.list({ page: 1, limit: 8 }),
+      query(
+        `SELECT id, name, slug, sku, stock, category_id FROM products
+         WHERE stock <= ? AND status = 'active' ORDER BY stock ASC, name ASC LIMIT 10`,
+        [lowStockThreshold]
+      ),
+      query(
+        "SELECT id, name, slug, sku, stock FROM products WHERE stock <= 0 AND status = 'active' ORDER BY name ASC LIMIT 10"
+      ),
+    ]);
 
-  const outOfStock = await query(
-    "SELECT id, name, slug, sku, stock FROM products WHERE stock <= 0 AND status = 'active' ORDER BY name ASC LIMIT 10"
-  );
+  const statusByName = new Map(statusBreakdown.items.map((row) => [row.status, row.total]));
 
   res.json({
     success: true,
@@ -72,18 +81,21 @@ const dashboard = asyncHandler(async (req, res) => {
         todayRevenue: Number(revenue.today_revenue),
         monthRevenue: Number(revenue.month_revenue),
         totalOrders: Number(revenue.total_orders),
-        pendingOrders: statusCounts.pending || 0,
-        confirmedOrders: statusCounts.confirmed || 0,
-        processingOrders: statusCounts.processing || 0,
-        shippedOrders: statusCounts.shipped || 0,
-        deliveredOrders: statusCounts.delivered || 0,
-        cancelledOrders: statusCounts.cancelled || 0,
+        pendingOrders: statusByName.get('pending') || 0,
+        confirmedOrders: statusByName.get('confirmed') || 0,
+        processingOrders: statusByName.get('processing') || 0,
+        shippedOrders: statusByName.get('shipped') || 0,
+        deliveredOrders: statusByName.get('delivered') || 0,
+        cancelledOrders: statusByName.get('cancelled') || 0,
         totalCustomers: customerStats ? Number(customerStats.total) : 0,
         totalProducts: productStats ? Number(productStats.total) : 0,
         activeProducts: productStats ? Number(productStats.active) : 0,
         lowStockProducts: productStats ? Number(productStats.low_stock) : 0,
         outOfStockProducts: productStats ? Number(productStats.out_of_stock) : 0,
       },
+      // Canonical, zero-filled, ordered - the chart renders exactly this.
+      ordersByStatus: statusBreakdown,
+      orderStatuses: ORDER_STATUSES.map((status) => ({ status, label: ORDER_STATUS_LABELS[status] })),
       revenueSeries: series,
       latestOrders: latestOrders.orders,
       lowStockProducts: lowStockRows,
@@ -102,48 +114,46 @@ const analyticsRevenue = asyncHandler(async (req, res) => {
 
 /** GET /api/admin/analytics/orders */
 const analyticsOrders = asyncHandler(async (req, res) => {
-  const [byStatus, byDay, cancelRequests] = await Promise.all([
-    query("SELECT order_status AS status, COUNT(*) AS total FROM orders GROUP BY order_status"),
+  const [statusBreakdown, byDay, cancelRequests] = await Promise.all([
+    orderModel.statusBreakdown(),
     query(
-      `SELECT DATE_FORMAT(created_at, '%Y-%m-%d') AS period, COUNT(*) AS total
-       FROM orders WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL 29 DAY)
+      `SELECT DATE_FORMAT(o.created_at, '%Y-%m-%d') AS period, COUNT(*) AS total
+       FROM orders o WHERE o.created_at >= DATE_SUB(CURDATE(), INTERVAL 29 DAY)
        GROUP BY period ORDER BY period ASC`
     ),
-    queryOne('SELECT COUNT(*) AS total FROM orders WHERE cancel_requested = 1 AND order_status = ?', ['pending']),
+    queryOne(
+      `SELECT COUNT(*) AS total FROM orders o
+       WHERE o.cancel_requested = 1 AND LOWER(TRIM(o.order_status)) = 'pending'`
+    ),
   ]);
 
-  res.json({ success: true, data: { byStatus, byDay, cancelRequests: cancelRequests ? Number(cancelRequests.total) : 0 } });
+  res.json({
+    success: true,
+    data: {
+      byStatus: statusBreakdown.items,
+      statusTotal: statusBreakdown.total,
+      byDay,
+      cancelRequests: cancelRequests ? Number(cancelRequests.total) : 0,
+    },
+  });
 });
 
 /** GET /api/admin/analytics/products */
 const analyticsProducts = asyncHandler(async (req, res) => {
-  const [topProducts, byCategory, lowStock, outOfStock] = await Promise.all([
+  const [topProducts, lowStock, outOfStock] = await Promise.all([
     query(
       `SELECT oi.product_id, oi.product_name, oi.product_image,
               SUM(oi.quantity) AS units, SUM(oi.total) AS revenue
        FROM order_items oi JOIN orders o ON o.id = oi.order_id
-       WHERE o.order_status <> 'cancelled'
+       WHERE ${countsAsRevenue}
        GROUP BY oi.product_id, oi.product_name, oi.product_image
        ORDER BY units DESC LIMIT 10`
     ),
-    query(
-      `SELECT c.name AS category,
-              COALESCE(SUM(oi.total), 0) AS revenue,
-              COALESCE(SUM(oi.quantity), 0) AS units
-       FROM categories c
-       LEFT JOIN order_items oi ON oi.category_id = c.id
-       LEFT JOIN orders o ON o.id = oi.order_id AND o.order_status <> 'cancelled'
-       GROUP BY c.id, c.name ORDER BY revenue DESC`
-    ),
-    query(
-      `SELECT id, name, sku, stock FROM products WHERE stock > 0 ORDER BY stock ASC LIMIT 10`
-    ),
-    query(
-      `SELECT id, name, sku, stock FROM products WHERE stock <= 0 ORDER BY name ASC LIMIT 10`
-    ),
+    query('SELECT id, name, sku, stock FROM products WHERE stock > 0 ORDER BY stock ASC LIMIT 10'),
+    query('SELECT id, name, sku, stock FROM products WHERE stock <= 0 ORDER BY name ASC LIMIT 10'),
   ]);
 
-  res.json({ success: true, data: { topProducts, byCategory, lowStock, outOfStock } });
+  res.json({ success: true, data: { topProducts, lowStock, outOfStock } });
 });
 
 /** GET /api/admin/analytics/customers */
@@ -156,8 +166,9 @@ const analyticsCustomers = asyncHandler(async (req, res) => {
     ),
     query(
       `SELECT u.id, u.name, u.mobile, COUNT(o.id) AS orders, COALESCE(SUM(o.total), 0) AS spent
-       FROM users u JOIN orders o ON o.user_id = u.id AND o.order_status <> 'cancelled'
-       GROUP BY u.id, u.name, u.mobile ORDER BY spent DESC LIMIT 10`
+       FROM users u JOIN orders o ON o.user_id = u.id
+        WHERE LOWER(TRIM(o.order_status)) NOT IN ('cancelled', 'canceled')
+        GROUP BY u.id, u.name, u.mobile ORDER BY spent DESC LIMIT 10`
     ),
   ]);
   res.json({ success: true, data: { growth, topSpenders } });
@@ -214,7 +225,7 @@ const overview = asyncHandler(async (req, res) => {
   const [counts, unreadChat] = await Promise.all([
     queryOne(
       `SELECT
-         (SELECT COUNT(*) FROM orders WHERE order_status = 'pending') AS pending_orders,
+         (SELECT COUNT(*) FROM orders WHERE LOWER(TRIM(order_status)) = 'pending') AS pending_orders,
          (SELECT COUNT(*) FROM products WHERE stock <= 0 AND status = 'active') AS out_of_stock,
          (SELECT COUNT(*) FROM reviews WHERE status = 'visible' AND created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)) AS new_reviews,
          (SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = 0) AS unread_notifications`,

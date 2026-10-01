@@ -5,6 +5,7 @@
  * Secrets are read once here and never logged.
  */
 const path = require('path');
+const os = require('os');
 
 const required = (key, fallback) => {
   const value = process.env[key];
@@ -34,7 +35,16 @@ const env = {
 
   clientUrl: process.env.CLIENT_URL || 'http://localhost:5173',
 
-  uploadDir: process.env.UPLOAD_DIR || path.join(__dirname, '..', '..', 'uploads'),
+  // The serverless filesystem is read-only apart from the temp directory, so
+  // uploads are written there when UPLOAD_DIR is not configured. Note that the
+  // temp directory is per-instance and does not survive a cold start: point
+  // UPLOAD_DIR at real storage (or move uploads to object storage) before
+  // serving real traffic, otherwise admin images vanish on redeploy.
+  uploadDir:
+    process.env.UPLOAD_DIR ||
+    (process.env.VERCEL
+      ? path.join(os.tmpdir(), 'eshopping-uploads')
+      : path.join(__dirname, '..', '..', 'uploads')),
 
   rateLimit: {
     windowMs: Number(process.env.RATE_LIMIT_WINDOW_MS || 15 * 60 * 1000),

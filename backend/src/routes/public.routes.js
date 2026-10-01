@@ -26,6 +26,9 @@ router.get('/categories/:slug', optionalAuth, catalogController.detail);
 
 router.get('/banners', catalogController.banners);
 router.get('/store', catalogController.store);
+router.get('/promotions', catalogController.promotions);
+// Same filtered payload under the name the storefront and profile call it by.
+router.get('/promotions/active', catalogController.promotions);
 
 router.post(
   '/coupons/validate',

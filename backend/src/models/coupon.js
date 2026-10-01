@@ -105,7 +105,11 @@ const validate = async (code, subtotal, userId = null) => {
       ? money((amount * Number(coupon.discount_value)) / 100)
       : money(coupon.discount_value);
 
-  if (coupon.maximum_discount) discount = Math.min(discount, money(coupon.maximum_discount));
+  // The cap only makes sense for percentage coupons; a fixed coupon's value is
+  // the advertised discount and must not be silently reduced by a max field.
+  if (coupon.discount_type === 'percent' && coupon.maximum_discount) {
+    discount = Math.min(discount, money(coupon.maximum_discount));
+  }
   discount = money(Math.min(discount, amount));
 
   return { coupon, discount };

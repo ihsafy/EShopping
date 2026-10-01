@@ -4,7 +4,7 @@ import { Helmet } from 'react-helmet-async';
 import { FiArrowLeft, FiArrowRight, FiEye } from 'react-icons/fi';
 import { fetchOrders } from '../services/orders';
 import { StatusPill } from '../components/OrderStatus';
-import { formatPrice, formatDate } from '../utils/format';
+import { formatPrice, formatDate, formatPaymentMethod, formatPaymentStatus } from '../utils/format';
 
 export default function Orders() {
   const [payload, setPayload] = useState(null);
@@ -85,7 +85,8 @@ export default function Orders() {
                       <strong>Customer</strong> {order.customer_name || order.account_name}
                     </span>
                     <span>
-                      <strong>Payment</strong> {order.payment_method} / {order.payment_status}
+                      <strong>Payment</strong> {formatPaymentMethod(order.payment_method)} /{' '}
+                      {formatPaymentStatus(order.payment_status)}
                     </span>
                     <span>
                       <strong>Total</strong> {formatPrice(order.total)}

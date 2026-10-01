@@ -4,6 +4,7 @@ import { Helmet } from 'react-helmet-async';
 import { FiEye, FiEyeOff, FiShield } from 'react-icons/fi';
 import toast from 'react-hot-toast';
 import useAuth from '../../context/useAuth';
+import Button from '../../components/ui/Button';
 import { adminLogin } from '../../services/auth';
 
 const EMPTY = { identifier: '', password: '' };
@@ -105,27 +106,40 @@ export default function AdminLogin() {
         <h1>Admin Sign In</h1>
         <p className="muted">Sign in with the administrator email or mobile number.</p>
 
-        {banner && <div className="alert alert--error">{banner}</div>}
+        {banner && (
+          <div className="alert alert-error" role="alert">
+            {banner}
+          </div>
+        )}
 
-        <form onSubmit={submit} noValidate>
-          <label className={`field ${errors.identifier ? 'field--invalid' : ''}`}>
-            <span>Email or mobile number</span>
+        <form onSubmit={submit} noValidate className="stack gap-4">
+          <div className="field">
+            <label className="label" htmlFor="admin-identifier">
+              Email or mobile number
+            </label>
             <input
+              id="admin-identifier"
               type="text"
+              className={`input ${errors.identifier ? 'input-invalid' : ''}`.trim()}
               autoComplete="username"
               maxLength={160}
               placeholder="admin@example.com"
               value={form.identifier}
               onChange={set('identifier')}
             />
-            {errors.identifier && <em className="field__error">{errors.identifier}</em>}
-          </label>
+            {errors.identifier && <span className="field-error">{errors.identifier}</span>}
+          </div>
 
-          <label className={`field ${errors.password ? 'field--invalid' : ''}`}>
-            <span>Password</span>
-            <span className="field__control">
+          <div className="field">
+            <label className="label" htmlFor="admin-password">
+              Password
+            </label>
+            <div className="input-group">
               <input
+                id="admin-password"
                 type={reveal ? 'text' : 'password'}
+                className={`input ${errors.password ? 'input-invalid' : ''}`.trim()}
+                style={{ paddingRight: 40 }}
                 autoComplete="current-password"
                 maxLength={100}
                 placeholder="Your password"
@@ -134,20 +148,20 @@ export default function AdminLogin() {
               />
               <button
                 type="button"
-                className="field__reveal"
+                className="input-group-end btn btn-ghost btn-sm btn-icon"
                 aria-label={reveal ? 'Hide password' : 'Show password'}
                 aria-pressed={reveal}
                 onClick={() => setReveal((v) => !v)}
               >
                 {reveal ? <FiEyeOff size={16} /> : <FiEye size={16} />}
               </button>
-            </span>
-            {errors.password && <em className="field__error">{errors.password}</em>}
-          </label>
+            </div>
+            {errors.password && <span className="field-error">{errors.password}</span>}
+          </div>
 
-          <button type="submit" className="btn btn--primary auth__submit" disabled={busy}>
+          <Button type="submit" variant="primary" block className="auth__submit" loading={busy}>
             {busy ? 'Signing in…' : 'Sign In'}
-          </button>
+          </Button>
         </form>
 
         <p className="auth__alt">

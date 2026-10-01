@@ -1,10 +1,14 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Helmet } from 'react-helmet-async';
 import toast from 'react-hot-toast';
-import { FiArrowDown, FiArrowUp, FiEdit2, FiEye, FiPlus, FiTrash2 } from 'react-icons/fi';
+import { FiArrowDown, FiArrowUp, FiEdit2, FiEye, FiImage, FiPlus, FiTrash2 } from 'react-icons/fi';
 import Modal from '../../components/admin/Modal';
 import Confirm from '../../components/admin/Confirm';
 import ImagePicker from '../../components/admin/ImagePicker';
+import Button from '../../components/ui/Button';
+import StatusPill from '../../components/ui/StatusPill';
+import EmptyState, { ErrorState } from '../../components/ui/EmptyState';
+import { SkeletonRow } from '../../components/ui/Skeleton';
 import { fetchAdminBanners, createBanner, updateBanner, deleteBanner, uploadImages } from '../../services/admin';
 
 const EMPTY_FORM = {
@@ -120,12 +124,12 @@ function BannerForm({ open, banner, onClose, onSaved }) {
       wide
       footer={
         <>
-          <button type="button" className="btn btn--ghost" onClick={onClose} disabled={saving}>
+          <Button variant="ghost" onClick={onClose} disabled={saving}>
             Cancel
-          </button>
-          <button type="submit" form="banner-form" className="btn btn--primary" disabled={saving}>
+          </Button>
+          <Button type="submit" form="banner-form" variant="primary" loading={saving}>
             {saving ? 'Saving…' : editing ? 'Save changes' : 'Create banner'}
-          </button>
+          </Button>
         </>
       }
     >
@@ -307,6 +311,8 @@ export default function AdminBanners() {
     }
   };
 
+  const hasBanners = banners.length > 0;
+
   return (
     <section className="admin-page">
       <Helmet>
@@ -318,45 +324,64 @@ export default function AdminBanners() {
           <h1>Homepage banners</h1>
           <p className="muted">Manage the hero carousel on the storefront homepage.</p>
         </div>
-        <button
-          type="button"
-          className="btn btn--primary"
+        <Button
+          variant="primary"
+          icon={FiPlus}
           onClick={() => {
             setEditing(null);
             setFormOpen(true);
           }}
         >
-          <FiPlus size={15} /> Add banner
-        </button>
+          Add banner
+        </Button>
       </div>
 
-      {error && (
-        <div className="alert alert--error">
+      {error && !hasBanners && (
+        <ErrorState title="Could not load banners" text={error} onRetry={load} retrying={loading} />
+      )}
+
+      {error && hasBanners && (
+        <div className="alert alert-error" role="alert">
           {error}{' '}
-          <button type="button" className="admin-linkbtn" onClick={load}>
+          <Button variant="ghost" size="sm" onClick={load}>
             Try again
-          </button>
+          </Button>
         </div>
       )}
 
-      {loading ? (
-        <p className="muted admin-page__loading">Loading banners…</p>
-      ) : banners.length === 0 ? (
-        <div className="admin-panel admin-empty">
-          <h2>No banners yet</h2>
-          <p className="muted">Add a banner to show a promo on the homepage hero.</p>
-          <button
-            type="button"
-            className="btn btn--primary"
-            onClick={() => {
-              setEditing(null);
-              setFormOpen(true);
-            }}
-          >
-            <FiPlus size={15} /> Add banner
-          </button>
+      {loading && !hasBanners && (
+        <div className="admin-table-wrap">
+          <table className="admin-table admin-table--rows">
+            <tbody>
+              {Array.from({ length: 6 }, (_, i) => (
+                <SkeletonRow key={i} columns={5} />
+              ))}
+            </tbody>
+          </table>
         </div>
-      ) : (
+      )}
+
+      {!loading && !error && !hasBanners && (
+        <EmptyState
+          icon={FiImage}
+          title="No banners yet"
+          text="Add a banner to show a promo on the homepage hero."
+          action={
+            <Button
+              variant="primary"
+              icon={FiPlus}
+              onClick={() => {
+                setEditing(null);
+                setFormOpen(true);
+              }}
+            >
+              Add banner
+            </Button>
+          }
+        />
+      )}
+
+      {hasBanners && (
         <div className="admin-table-wrap">
           <table className="admin-table admin-table--rows">
             <thead>
@@ -409,45 +434,44 @@ export default function AdminBanners() {
                     </div>
                   </td>
                   <td>
-                    <span
-                      className="admin-pill"
-                      data-status={banner.status === 'active' ? 'delivered' : 'cancelled'}
-                    >
-                      {banner.status}
-                    </span>
+                    <StatusPill status={banner.status} />
                   </td>
                   <td>
                     <div className="admin-actions">
-                      <button
-                        type="button"
-                        className="btn btn--ghost btn--sm"
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        icon={FiEdit2}
                         onClick={() => {
                           setEditing(banner);
                           setFormOpen(true);
                         }}
                         aria-label={`Edit ${banner.title}`}
                       >
-                        <FiEdit2 size={13} /> Edit
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn--ghost btn--sm"
+                        Edit
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        icon={FiEye}
                         onClick={() => {
                           if (banner.image_url) window.open(banner.image_url, '_blank', 'noopener');
                         }}
                         aria-label={`Preview ${banner.title}`}
                         disabled={!banner.image_url}
                       >
-                        <FiEye size={13} /> Preview
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn--ghost btn--sm admin-actions__danger"
+                        Preview
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="admin-actions__danger"
+                        icon={FiTrash2}
                         onClick={() => setConfirming(banner)}
                         aria-label={`Delete ${banner.title}`}
                       >
-                        <FiTrash2 size={13} /> Delete
-                      </button>
+                        Delete
+                      </Button>
                     </div>
                   </td>
                 </tr>

@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Helmet } from 'react-helmet-async';
 import toast from 'react-hot-toast';
-import { FiChevronLeft, FiChevronRight, FiEye, FiSearch } from 'react-icons/fi';
+import { FiChevronLeft, FiChevronRight, FiEye, FiPackage, FiSearch } from 'react-icons/fi';
 import Modal from '../../components/admin/Modal';
+import Button from '../../components/ui/Button';
+import StatusPill from '../../components/ui/StatusPill';
+import EmptyState, { ErrorState } from '../../components/ui/EmptyState';
+import { SkeletonRow } from '../../components/ui/Skeleton';
 import { fetchAdminOrders, fetchAdminOrder, setOrderStatus } from '../../services/admin';
 import { formatPrice, formatDate } from '../../utils/format';
-
-const STATUSES = ['pending', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled'];
+import { ORDER_STATUSES } from '../../utils/orderStatus';
 
 function OrderDetail({ order, onClose, onChanged }) {
   const [status, setStatus] = useState(order?.order_status || 'pending');
@@ -68,10 +71,7 @@ function OrderDetail({ order, onClose, onChanged }) {
               Method <strong>{order.payment_method}</strong>
             </p>
             <p>
-              Status{' '}
-              <span className="admin-pill" data-status={order.payment_status === 'paid' ? 'delivered' : 'pending'}>
-                {order.payment_status}
-              </span>
+              Status <StatusPill status={order.payment_status} />
             </p>
             <p className="muted">Placed on {formatDate(order.created_at)}</p>
           </div>
@@ -140,11 +140,12 @@ function OrderDetail({ order, onClose, onChanged }) {
             </label>
             <select
               id="order-status"
+              className="select"
               value={status}
               onChange={(event) => setStatus(event.target.value)}
               disabled={saving}
             >
-              {STATUSES.map((value) => (
+              {ORDER_STATUSES.map((value) => (
                 <option key={value} value={value}>
                   {value}
                 </option>
@@ -158,22 +159,18 @@ function OrderDetail({ order, onClose, onChanged }) {
             <input
               id="order-note"
               type="text"
+              className="input"
               value={note}
               onChange={(event) => setNote(event.target.value)}
               placeholder="e.g. Courier pickup scheduled"
               disabled={saving}
             />
           </div>
-          <button
-            type="button"
-            className="btn btn--primary"
-            onClick={save}
-            disabled={saving || unchanged}
-          >
-            {saving ? 'Saving…' : 'Update status'}
-          </button>
+          <Button variant="primary" onClick={save} loading={saving} disabled={unchanged}>
+            Update status
+          </Button>
           <p className="admin-field__hint">
-            Current status: <span className="admin-pill" data-status={order.order_status}>{order.order_status}</span>
+            Current status: <StatusPill status={order.order_status} />
             {order.status_note ? ` · ${order.status_note}` : ''}
           </p>
         </div>
@@ -245,6 +242,7 @@ export default function AdminOrders() {
   const pagination = data?.pagination || {};
   const totalPages = Number(pagination.totalPages) || 1;
   const hasFilters = Boolean(filters.search || filters.status);
+  const showTableSkeleton = loading && !data;
 
   return (
     <section className="admin-page">
@@ -264,30 +262,32 @@ export default function AdminOrders() {
       <form className="admin-filters" onSubmit={applyFilters}>
         <input
           type="search"
+          className="input"
           value={draft.search}
           onChange={(event) => setDraft((prev) => ({ ...prev, search: event.target.value }))}
           placeholder="Search order number, customer or phone"
           aria-label="Search orders"
         />
         <select
+          className="select"
           value={draft.status}
           onChange={(event) => setDraft((prev) => ({ ...prev, status: event.target.value }))}
           aria-label="Filter by status"
         >
           <option value="">All statuses</option>
-          {STATUSES.map((value) => (
+          {ORDER_STATUSES.map((value) => (
             <option key={value} value={value}>
               {value}
             </option>
           ))}
         </select>
-        <button type="submit" className="btn btn--primary btn--sm">
-          <FiSearch size={14} /> Apply
-        </button>
+        <Button type="submit" variant="primary" size="sm" icon={FiSearch}>
+          Apply
+        </Button>
         {hasFilters && (
-          <button
-            type="button"
-            className="btn btn--ghost btn--sm"
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={() => {
               setDraft({ search: '', status: '' });
               setPage(1);
@@ -295,30 +295,49 @@ export default function AdminOrders() {
             }}
           >
             Reset
-          </button>
+          </Button>
         )}
       </form>
 
-      {error && (
-        <div className="alert alert--error">
-          {error}{' '}
-          <button type="button" className="admin-linkbtn" onClick={load}>
-            Try again
-          </button>
+      {error && !data && <ErrorState title="Could not load orders" text={error} onRetry={load} retrying={loading} />}
+
+      {showTableSkeleton && (
+        <div className="admin-table-wrap">
+          <table className="admin-table admin-table--rows">
+            <tbody>
+              {Array.from({ length: 6 }, (_, i) => (
+                <SkeletonRow key={i} columns={7} />
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
-
-      {loading && !data && <p className="muted admin-page__loading">Loading orders…</p>}
 
       {data && (
         <>
           {orders.length === 0 ? (
-            <div className="admin-panel admin-empty">
-              <h2>{hasFilters ? 'No orders match these filters' : 'No orders yet'}</h2>
-              <p className="muted">
-                {hasFilters ? 'Adjust the filters and try again.' : 'Orders placed by customers will appear here.'}
-              </p>
-            </div>
+            <EmptyState
+              icon={FiPackage}
+              title={hasFilters ? 'No orders match these filters' : 'No orders yet'}
+              text={
+                hasFilters ? 'Adjust the filters and try again.' : 'Orders placed by customers will appear here.'
+              }
+              action={
+                hasFilters ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setDraft({ search: '', status: '' });
+                      setPage(1);
+                      setFilters({ search: '', status: '' });
+                    }}
+                  >
+                    Clear filters
+                  </Button>
+                ) : null
+              }
+            />
           ) : (
             <div className="admin-table-wrap">
               <table className="admin-table admin-table--rows">
@@ -347,23 +366,24 @@ export default function AdminOrders() {
                       <td>{formatPrice(order.total)}</td>
                       <td>
                         {order.payment_method}
-                        <em className="admin-sub">{order.payment_status}</em>
+                        <em className="admin-sub">
+                          <StatusPill status={order.payment_status} dot={false} />
+                        </em>
                       </td>
                       <td>
-                        <span className="admin-pill" data-status={order.order_status}>
-                          {order.order_status}
-                        </span>
+                        <StatusPill status={order.order_status} />
                       </td>
                       <td>
                         <div className="admin-actions">
-                          <button
-                            type="button"
-                            className="btn btn--ghost btn--sm"
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            icon={FiEye}
                             onClick={() => openOrder(order.id)}
                             aria-label={`View order ${order.order_number}`}
                           >
-                            <FiEye size={13} /> View
-                          </button>
+                            View
+                          </Button>
                         </div>
                       </td>
                     </tr>
@@ -375,25 +395,27 @@ export default function AdminOrders() {
 
           {orders.length > 0 && totalPages > 1 && (
             <div className="admin-pager">
-              <button
-                type="button"
-                className="btn btn--ghost btn--sm"
+              <Button
+                variant="ghost"
+                size="sm"
+                icon={FiChevronLeft}
                 disabled={page <= 1 || loading}
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
               >
-                <FiChevronLeft size={14} /> Previous
-              </button>
+                Previous
+              </Button>
               <span className="muted">
                 Page {pagination.page || page} of {totalPages} · {pagination.total} total
               </span>
-              <button
-                type="button"
-                className="btn btn--ghost btn--sm"
+              <Button
+                variant="ghost"
+                size="sm"
+                iconEnd={FiChevronRight}
                 disabled={page >= totalPages || loading}
                 onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
               >
-                Next <FiChevronRight size={14} />
-              </button>
+                Next
+              </Button>
             </div>
           )}
         </>

@@ -1,10 +1,14 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Helmet } from 'react-helmet-async';
 import toast from 'react-hot-toast';
-import { FiEdit2, FiPlus, FiTrash2 } from 'react-icons/fi';
+import { FiEdit2, FiGrid, FiPlus, FiTrash2 } from 'react-icons/fi';
 import Modal from '../../components/admin/Modal';
 import Confirm from '../../components/admin/Confirm';
 import ImagePicker from '../../components/admin/ImagePicker';
+import Button from '../../components/ui/Button';
+import StatusPill from '../../components/ui/StatusPill';
+import EmptyState, { ErrorState } from '../../components/ui/EmptyState';
+import { SkeletonRow } from '../../components/ui/Skeleton';
 import {
   fetchAdminCategories,
   createCategory,
@@ -97,12 +101,12 @@ function CategoryForm({ open, category, onClose, onSaved }) {
       wide
       footer={
         <>
-          <button type="button" className="btn btn--ghost" onClick={onClose} disabled={saving}>
+          <Button variant="ghost" onClick={onClose} disabled={saving}>
             Cancel
-          </button>
-          <button type="submit" form="category-form" className="btn btn--primary" disabled={saving}>
+          </Button>
+          <Button type="submit" form="category-form" variant="primary" loading={saving}>
             {saving ? 'Saving…' : editing ? 'Save changes' : 'Create category'}
-          </button>
+          </Button>
         </>
       }
     >
@@ -226,6 +230,8 @@ export default function AdminCategories() {
     }
   };
 
+  const hasCategories = categories.length > 0;
+
   return (
     <section className="admin-page">
       <Helmet>
@@ -237,35 +243,52 @@ export default function AdminCategories() {
           <h1>Categories</h1>
           <p className="muted">Control which categories shoppers see, and in what order.</p>
         </div>
-        <button
-          type="button"
-          className="btn btn--primary"
+        <Button
+          variant="primary"
+          icon={FiPlus}
           onClick={() => {
             setEditing(null);
             setFormOpen(true);
           }}
         >
-          <FiPlus size={15} /> Add category
-        </button>
+          Add category
+        </Button>
       </div>
 
-      {error && (
-        <div className="alert alert--error">
+      {error && !hasCategories && (
+        <ErrorState title="Could not load categories" text={error} onRetry={load} retrying={loading} />
+      )}
+
+      {error && hasCategories && (
+        <div className="alert alert-error" role="alert">
           {error}{' '}
-          <button type="button" className="admin-linkbtn" onClick={load}>
+          <Button variant="ghost" size="sm" onClick={load}>
             Try again
-          </button>
+          </Button>
         </div>
       )}
 
-      {loading ? (
-        <p className="muted admin-page__loading">Loading categories…</p>
-      ) : categories.length === 0 ? (
-        <div className="admin-panel admin-empty">
-          <h2>No categories yet</h2>
-          <p className="muted">Create a category to start grouping products.</p>
+      {loading && !hasCategories && (
+        <div className="admin-table-wrap">
+          <table className="admin-table admin-table--rows">
+            <tbody>
+              {Array.from({ length: 6 }, (_, i) => (
+                <SkeletonRow key={i} columns={5} />
+              ))}
+            </tbody>
+          </table>
         </div>
-      ) : (
+      )}
+
+      {!loading && !error && !hasCategories && (
+        <EmptyState
+          icon={FiGrid}
+          title="No categories yet"
+          text="Create a category to start grouping products."
+        />
+      )}
+
+      {hasCategories && (
         <div className="admin-table-wrap">
           <table className="admin-table admin-table--rows">
             <thead>
@@ -298,41 +321,38 @@ export default function AdminCategories() {
                   <td>{category.sort_order}</td>
                   <td>{Number(category.product_count) || 0}</td>
                   <td>
-                    <span
-                      className="admin-pill"
-                      data-status={category.status === 'active' ? 'delivered' : 'cancelled'}
-                    >
-                      {category.status === 'active' ? 'visible' : 'hidden'}
-                    </span>
+                    <StatusPill
+                      status={category.status}
+                      label={category.status === 'active' ? 'visible' : 'hidden'}
+                    />
                   </td>
                   <td>
                     <div className="admin-actions">
-                      <button
-                        type="button"
-                        className="btn btn--ghost btn--sm"
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        icon={FiEdit2}
                         onClick={() => {
                           setEditing(category);
                           setFormOpen(true);
                         }}
                         aria-label={`Edit ${category.name}`}
                       >
-                        <FiEdit2 size={13} /> Edit
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn--ghost btn--sm"
-                        onClick={() => toggleStatus(category)}
-                      >
+                        Edit
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={() => toggleStatus(category)}>
                         {category.status === 'active' ? 'Hide' : 'Show'}
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn--ghost btn--sm admin-actions__danger"
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="admin-actions__danger"
+                        icon={FiTrash2}
                         onClick={() => setConfirming(category)}
                         aria-label={`Delete ${category.name}`}
                       >
-                        <FiTrash2 size={13} /> Delete
-                      </button>
+                        Delete
+                      </Button>
                     </div>
                   </td>
                 </tr>

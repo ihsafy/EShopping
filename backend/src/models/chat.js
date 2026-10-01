@@ -92,14 +92,10 @@ const addMessage = async ({ conversationId, senderId, senderRole, message }) => 
 };
 
 const markRead = (conversationId, role) => {
-  const column = role === 'admin' ? 'unread_user' : 'unread_admin';
-  const readColumn = role === 'admin' ? 'unread_admin' : 'unread_user';
+  const column = role === 'admin' ? 'unread_admin' : 'unread_user';
   return Promise.all([
-    query('UPDATE messages SET is_read = 1 WHERE conversation_id = ? AND sender_role <> ? AND is_read = 0', [
-      conversationId,
-      role,
-    ]),
-    query(`UPDATE conversations SET ${column} = 0 WHERE id = ?`, [conversationId]).then(() => readColumn),
+    query('UPDATE messages SET is_read = 1 WHERE conversation_id = ? AND sender_role <> ? AND is_read = 0', [conversationId, role === 'admin' ? 'admin' : 'customer']),
+    query(`UPDATE conversations SET ${column} = 0 WHERE id = ?`, [conversationId]),
   ]);
 };
 

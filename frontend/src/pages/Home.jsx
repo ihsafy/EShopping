@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useOutletContext } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
-import { FiArrowLeft, FiArrowRight } from 'react-icons/fi';
+import { FiArrowLeft, FiArrowRight, FiChevronLeft, FiChevronRight } from 'react-icons/fi';
 import SectionRow from '../components/SectionRow';
 import CategoryIcon from '../components/CategoryIcon';
 import { fetchBanners, fetchHome } from '../services/catalog';
@@ -23,6 +23,11 @@ export default function Home() {
   const [home, setHome] = useState(null);
   const [banners, setBanners] = useState([]);
   const [slide, setSlide] = useState(0);
+  // Callback ref, not useRef: the strip only mounts once the home data has
+  // loaded, and the effect below has to run when it actually appears.
+  const [strip, setStrip] = useState(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -44,6 +49,35 @@ export default function Home() {
     const id = setInterval(() => setSlide((s) => (s + 1) % banners.length), 6000);
     return () => clearInterval(id);
   }, [banners.length]);
+
+  // The strip is a horizontal scroller, so the chevrons have to follow the
+  // scroll offset, the viewport width and the category list.
+  useEffect(() => {
+    if (!strip) return undefined;
+
+    const update = () => {
+      const max = strip.scrollWidth - strip.clientWidth;
+      setCanScrollLeft(strip.scrollLeft > 2);
+      setCanScrollRight(strip.scrollLeft < max - 2);
+    };
+
+    update();
+    strip.addEventListener('scroll', update, { passive: true });
+    window.addEventListener('resize', update);
+    return () => {
+      strip.removeEventListener('scroll', update);
+      window.removeEventListener('resize', update);
+    };
+  }, [strip, categories.length]);
+
+  const nudgeStrip = (direction) => {
+    if (!strip) return;
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    strip.scrollBy({
+      left: direction === 'left' ? -300 : 300,
+      behavior: reduced ? 'auto' : 'smooth',
+    });
+  };
 
   if (loading) return <div className="state state--loading">Loading the store…</div>;
   if (error) return <div className="state state--error">Could not load the store: {error}</div>;
@@ -102,16 +136,43 @@ export default function Home() {
       )}
 
       <section className="container category-strip">
-        <div className="category-strip__track">
-          {categories.map((category) => (
-            <Link key={category.id} to={`/category/${category.slug}`} className="category-chip">
-              <span className="category-chip__icon">
-                <CategoryIcon name={category.icon} />
-              </span>
-              <span className="category-chip__name">{category.name}</span>
-              <span className="muted">{category.product_count ?? 0} items</span>
-            </Link>
-          ))}
+        <div className="category-strip__inner">
+          <button
+            type="button"
+            className="category-strip__nav category-strip__nav--prev"
+            onClick={() => nudgeStrip('left')}
+            disabled={!canScrollLeft}
+            aria-label="Scroll categories left"
+          >
+            <FiChevronLeft aria-hidden="true" />
+          </button>
+
+          <div className="category-strip__track no-scrollbar" ref={setStrip}>
+            {categories.map((category) => (
+              <Link key={category.id} to={`/category/${category.slug}`} className="category-chip">
+                <span className="category-chip__icon">
+                  <CategoryIcon name={category.icon} />
+                </span>
+                <span className="category-chip__body">
+                  <span className="category-chip__name">{category.name}</span>
+                  <span className="category-chip__count">
+                    {category.product_count ?? 0}{' '}
+                    {(category.product_count ?? 0) === 1 ? 'item' : 'items'}
+                  </span>
+                </span>
+              </Link>
+            ))}
+          </div>
+
+          <button
+            type="button"
+            className="category-strip__nav category-strip__nav--next"
+            onClick={() => nudgeStrip('right')}
+            disabled={!canScrollRight}
+            aria-label="Scroll categories right"
+          >
+            <FiChevronRight aria-hidden="true" />
+          </button>
         </div>
       </section>
 

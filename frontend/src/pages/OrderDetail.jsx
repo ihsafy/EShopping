@@ -5,7 +5,7 @@ import toast from 'react-hot-toast';
 import { FiArrowLeft } from 'react-icons/fi';
 import { fetchOrder } from '../services/orders';
 import OrderSteps, { StatusPill } from '../components/OrderStatus';
-import { formatPrice, formatDate } from '../utils/format';
+import { formatPrice, formatDate, formatPaymentMethod, formatPaymentStatus } from '../utils/format';
 
 export default function OrderDetail() {
   const { id } = useParams();
@@ -75,7 +75,8 @@ export default function OrderDetail() {
                 <strong>Placed on</strong> {formatDate(order.created_at)}
               </p>
               <p>
-                <strong>Payment</strong> {order.payment_method} / {order.payment_status}
+                <strong>Payment</strong> {formatPaymentMethod(order.payment_method)} /{' '}
+                {formatPaymentStatus(order.payment_status)}
               </p>
               <p>
                 <strong>Delivery zone</strong>{' '}

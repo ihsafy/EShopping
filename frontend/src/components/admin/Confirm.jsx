@@ -1,4 +1,5 @@
 import Modal from './Modal';
+import Button from '../ui/Button';
 
 /**
  * Two-step deletion guard: destructive actions are never executed by a single
@@ -22,17 +23,12 @@ export default function Confirm({
       onClose={busy ? undefined : onCancel}
       footer={
         <>
-          <button type="button" className="btn btn--ghost" onClick={onCancel} disabled={busy}>
+          <Button variant="ghost" onClick={onCancel} disabled={busy}>
             Cancel
-          </button>
-          <button
-            type="button"
-            className={`btn ${danger ? 'btn--danger' : 'btn--primary'}`}
-            onClick={onConfirm}
-            disabled={busy}
-          >
+          </Button>
+          <Button variant={danger ? 'danger' : 'primary'} onClick={onConfirm} loading={busy}>
             {busy ? 'Working…' : confirmLabel}
-          </button>
+          </Button>
         </>
       }
     >

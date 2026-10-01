@@ -1,9 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Helmet } from 'react-helmet-async';
 import toast from 'react-hot-toast';
-import { FiEdit2, FiPlus, FiTrash2 } from 'react-icons/fi';
+import { FiEdit2, FiPlus, FiTag, FiTrash2 } from 'react-icons/fi';
 import Modal from '../../components/admin/Modal';
 import Confirm from '../../components/admin/Confirm';
+import Button from '../../components/ui/Button';
+import StatusPill from '../../components/ui/StatusPill';
+import EmptyState, { ErrorState } from '../../components/ui/EmptyState';
+import { SkeletonRow } from '../../components/ui/Skeleton';
 import { fetchAdminCoupons, createCoupon, updateCoupon, deleteCoupon } from '../../services/admin';
 import { formatPrice, formatDate } from '../../utils/format';
 
@@ -20,6 +24,24 @@ const EMPTY_FORM = {
   perUserLimit: '1',
   status: 'active',
 };
+
+/** Input with a label that floats above the field on focus or when filled. */
+function FloatField({ id, label, error, hint, className = '', ...inputProps }) {
+  return (
+    <label
+      className={`admin-field admin-float ${error ? 'is-invalid' : ''} ${className}`.trim()}
+      htmlFor={id}
+    >
+      <input id={id} className={error ? 'is-invalid' : ''} placeholder=" " {...inputProps} />
+      <span className="admin-float__label">{label}</span>
+      {error ? (
+        <span className="admin-field__error">{error}</span>
+      ) : hint ? (
+        <span className="admin-field__hint">{hint}</span>
+      ) : null}
+    </label>
+  );
+}
 
 function CouponForm({ open, coupon, onClose, onSaved }) {
   const [values, setValues] = useState(EMPTY_FORM);
@@ -112,31 +134,27 @@ function CouponForm({ open, coupon, onClose, onSaved }) {
       wide
       footer={
         <>
-          <button type="button" className="btn btn--ghost" onClick={onClose} disabled={saving}>
+          <Button variant="ghost" onClick={onClose} disabled={saving}>
             Cancel
-          </button>
-          <button type="submit" form="coupon-form" className="btn btn--primary" disabled={saving}>
+          </Button>
+          <Button type="submit" form="coupon-form" variant="primary" loading={saving}>
             {saving ? 'Saving…' : editing ? 'Save changes' : 'Create coupon'}
-          </button>
+          </Button>
         </>
       }
     >
-      <form id="coupon-form" className="admin-form" onSubmit={submit} noValidate>
+      <form id="coupon-form" className="admin-form admin-form--card" onSubmit={submit} noValidate>
         <div className="admin-form__row">
-          <div className="admin-field">
-            <label className="admin-field__label" htmlFor="cp-code">
-              Code *
-            </label>
-            <input
-              id="cp-code"
-              type="text"
-              value={values.code}
-              onChange={set('code')}
-              placeholder="WELCOME10"
-              className={errors.code ? 'is-invalid' : ''}
-            />
-            {errors.code && <span className="admin-field__error">{errors.code}</span>}
-          </div>
+          <FloatField
+            id="cp-code"
+            label="Code *"
+            value={values.code}
+            onChange={set('code')}
+            autoComplete="off"
+            spellCheck="false"
+            error={errors.code}
+            hint="Shown to shoppers, e.g. WELCOME10"
+          />
           <div className="admin-field">
             <label className="admin-field__label" htmlFor="cp-type">
               Discount type
@@ -146,76 +164,65 @@ function CouponForm({ open, coupon, onClose, onSaved }) {
               <option value="fixed">Fixed amount (৳)</option>
             </select>
           </div>
-          <div className="admin-field">
-            <label className="admin-field__label" htmlFor="cp-value">
-              Value *
-            </label>
-            <input
-              id="cp-value"
-              type="number"
-              min="0"
-              step="0.01"
-              value={values.discountValue}
-              onChange={set('discountValue')}
-              placeholder={values.discountType === 'percent' ? '10' : '200'}
-              className={errors.discountValue ? 'is-invalid' : ''}
-            />
-            {errors.discountValue && <span className="admin-field__error">{errors.discountValue}</span>}
-          </div>
-        </div>
-
-        <div className="admin-field">
-          <label className="admin-field__label" htmlFor="cp-description">
-            Description
-          </label>
-          <input
-            id="cp-description"
-            type="text"
-            value={values.description}
-            onChange={set('description')}
-            placeholder="10% off for new customers"
+          <FloatField
+            id="cp-value"
+            label="Value *"
+            type="number"
+            min="0"
+            step="0.01"
+            inputMode="decimal"
+            value={values.discountValue}
+            onChange={set('discountValue')}
+            error={errors.discountValue}
+            hint={values.discountType === 'percent' ? 'Percentage off' : 'Amount off in ৳'}
           />
         </div>
 
+        <FloatField
+          id="cp-description"
+          label="Description"
+          value={values.description}
+          onChange={set('description')}
+          hint="Optional note shown next to the code"
+        />
+
         <div className="admin-form__row">
-          <div className="admin-field">
-            <label className="admin-field__label" htmlFor="cp-min">
-              Minimum order (৳)
-            </label>
-            <input id="cp-min" type="number" min="0" value={values.minimumOrder} onChange={set('minimumOrder')} placeholder="0" />
-          </div>
-          <div className="admin-field">
-            <label className="admin-field__label" htmlFor="cp-max">
-              Max discount (৳)
-            </label>
-            <input
-              id="cp-max"
-              type="number"
-              min="0"
-              value={values.maximumDiscount}
-              onChange={set('maximumDiscount')}
-              placeholder="No cap"
-            />
-          </div>
-          <div className="admin-field">
-            <label className="admin-field__label" htmlFor="cp-usage">
-              Total usage limit
-            </label>
-            <input
-              id="cp-usage"
-              type="number"
-              min="0"
-              value={values.usageLimit}
-              onChange={set('usageLimit')}
-              placeholder="Unlimited"
-            />
-          </div>
-          <div className="admin-field">
-            <label className="admin-field__label" htmlFor="cp-user">
-              Per-customer limit
-            </label>
-            <input id="cp-user" type="number" min="1" value={values.perUserLimit} onChange={set('perUserLimit')} />
-          </div>
+          <FloatField
+            id="cp-min"
+            label="Minimum order (৳)"
+            type="number"
+            min="0"
+            inputMode="decimal"
+            value={values.minimumOrder}
+            onChange={set('minimumOrder')}
+          />
+          <FloatField
+            id="cp-max"
+            label="Max discount (৳)"
+            type="number"
+            min="0"
+            inputMode="decimal"
+            value={values.maximumDiscount}
+            onChange={set('maximumDiscount')}
+          />
+          <FloatField
+            id="cp-usage"
+            label="Total usage limit"
+            type="number"
+            min="0"
+            inputMode="numeric"
+            value={values.usageLimit}
+            onChange={set('usageLimit')}
+          />
+          <FloatField
+            id="cp-user"
+            label="Per-customer limit"
+            type="number"
+            min="1"
+            inputMode="numeric"
+            value={values.perUserLimit}
+            onChange={set('perUserLimit')}
+          />
         </div>
 
         <div className="admin-form__row">
@@ -238,14 +245,20 @@ function CouponForm({ open, coupon, onClose, onSaved }) {
             />
             {errors.expiryDate && <span className="admin-field__error">{errors.expiryDate}</span>}
           </div>
-          <div className="admin-field">
-            <label className="admin-field__label" htmlFor="cp-status">
-              Status
+          <div className="admin-field admin-field--switch">
+            <span className="admin-field__label">Active status</span>
+            <label className="admin-switch" htmlFor="cp-status">
+              <input
+                id="cp-status"
+                type="checkbox"
+                checked={values.status === 'active'}
+                onChange={(event) =>
+                  setValues((prev) => ({ ...prev, status: event.target.checked ? 'active' : 'inactive' }))
+                }
+              />
+              <span aria-hidden="true" />
+              <em>{values.status === 'active' ? 'Active' : 'Inactive'}</em>
             </label>
-            <select id="cp-status" value={values.status} onChange={set('status')}>
-              <option value="active">Active</option>
-              <option value="inactive">Inactive</option>
-            </select>
           </div>
         </div>
       </form>
@@ -293,6 +306,8 @@ export default function AdminCoupons() {
     }
   };
 
+  const hasCoupons = coupons.length > 0;
+
   return (
     <section className="admin-page">
       <Helmet>
@@ -304,45 +319,64 @@ export default function AdminCoupons() {
           <h1>Promotions</h1>
           <p className="muted">Discount codes customers can apply at checkout.</p>
         </div>
-        <button
-          type="button"
-          className="btn btn--primary"
+        <Button
+          variant="primary"
+          icon={FiPlus}
           onClick={() => {
             setEditing(null);
             setFormOpen(true);
           }}
         >
-          <FiPlus size={15} /> Add promotion
-        </button>
+          Add promotion
+        </Button>
       </div>
 
-      {error && (
-        <div className="alert alert--error">
+      {error && !hasCoupons && (
+        <ErrorState title="Could not load promotions" text={error} onRetry={load} retrying={loading} />
+      )}
+
+      {error && hasCoupons && (
+        <div className="alert alert-error" role="alert">
           {error}{' '}
-          <button type="button" className="admin-linkbtn" onClick={load}>
+          <Button variant="ghost" size="sm" onClick={load}>
             Try again
-          </button>
+          </Button>
         </div>
       )}
 
-      {loading ? (
-        <p className="muted admin-page__loading">Loading promotions…</p>
-      ) : coupons.length === 0 ? (
-        <div className="admin-panel admin-empty">
-          <h2>No promotions yet</h2>
-          <p className="muted">Create a code like WELCOME10 to give shoppers a discount.</p>
-          <button
-            type="button"
-            className="btn btn--primary"
-            onClick={() => {
-              setEditing(null);
-              setFormOpen(true);
-            }}
-          >
-            <FiPlus size={15} /> Add promotion
-          </button>
+      {loading && !hasCoupons && (
+        <div className="admin-table-wrap">
+          <table className="admin-table admin-table--rows">
+            <tbody>
+              {Array.from({ length: 6 }, (_, i) => (
+                <SkeletonRow key={i} columns={6} />
+              ))}
+            </tbody>
+          </table>
         </div>
-      ) : (
+      )}
+
+      {!loading && !error && !hasCoupons && (
+        <EmptyState
+          icon={FiTag}
+          title="No promotions yet"
+          text="Create a code like WELCOME10 to give shoppers a discount."
+          action={
+            <Button
+              variant="primary"
+              icon={FiPlus}
+              onClick={() => {
+                setEditing(null);
+                setFormOpen(true);
+              }}
+            >
+              Add promotion
+            </Button>
+          }
+        />
+      )}
+
+      {hasCoupons && (
         <div className="admin-table-wrap">
           <table className="admin-table admin-table--rows">
             <thead>
@@ -386,34 +420,32 @@ export default function AdminCoupons() {
                     </em>
                   </td>
                   <td>
-                    <span
-                      className="admin-pill"
-                      data-status={coupon.status === 'active' ? 'delivered' : 'cancelled'}
-                    >
-                      {coupon.status}
-                    </span>
+                    <StatusPill status={coupon.status} />
                   </td>
                   <td>
                     <div className="admin-actions">
-                      <button
-                        type="button"
-                        className="btn btn--ghost btn--sm"
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        icon={FiEdit2}
                         onClick={() => {
                           setEditing(coupon);
                           setFormOpen(true);
                         }}
                         aria-label={`Edit ${coupon.code}`}
                       >
-                        <FiEdit2 size={13} /> Edit
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn--ghost btn--sm admin-actions__danger"
+                        Edit
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="admin-actions__danger"
+                        icon={FiTrash2}
                         onClick={() => setConfirming(coupon)}
                         aria-label={`Delete ${coupon.code}`}
                       >
-                        <FiTrash2 size={13} /> Delete
-                      </button>
+                        Delete
+                      </Button>
                     </div>
                   </td>
                 </tr>

@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Helmet } from 'react-helmet-async';
 import toast from 'react-hot-toast';
+import Button from '../../components/ui/Button';
+import { ErrorState } from '../../components/ui/EmptyState';
+import { Skeleton } from '../../components/ui/Skeleton';
 import { fetchAdminSettings, saveSettings } from '../../services/admin';
 import { formatPrice } from '../../utils/format';
 
@@ -69,7 +72,39 @@ export default function AdminStoreInfo() {
     }
   };
 
-  if (loading) return <p className="muted admin-page__loading">Loading store information…</p>;
+  if (loading)
+    return (
+      <section className="admin-page" aria-busy="true">
+        <div className="admin-page__head">
+          <div>
+            <Skeleton className="skeleton-title" width={200} />
+            <Skeleton className="skeleton-text" width="52%" />
+          </div>
+        </div>
+        <div className="admin-panel admin-form">
+          <div className="admin-form__row">
+            {FIELDS.map(({ key }) => (
+              <div className="admin-field" key={key}>
+                <Skeleton className="skeleton-text" width="34%" />
+                <Skeleton height={42} radius="var(--r-md)" />
+              </div>
+            ))}
+          </div>
+          <Skeleton className="skeleton-title" width={160} />
+          <div className="admin-form__row">
+            {FEES.map(({ key }) => (
+              <div className="admin-field" key={key}>
+                <Skeleton className="skeleton-text" width="46%" />
+                <Skeleton height={42} radius="var(--r-md)" />
+              </div>
+            ))}
+          </div>
+          <div className="admin-form__actions">
+            <Skeleton height={42} width={190} radius="var(--r-md)" />
+          </div>
+        </div>
+      </section>
+    );
 
   return (
     <section className="admin-page">
@@ -85,12 +120,12 @@ export default function AdminStoreInfo() {
       </div>
 
       {error && (
-        <div className="alert alert--error">
-          {error}{' '}
-          <button type="button" className="admin-linkbtn" onClick={() => window.location.reload()}>
-            Reload
-          </button>
-        </div>
+        <ErrorState
+          title="Could not load the store information"
+          text={error}
+          onRetry={() => window.location.reload()}
+          retrying={loading}
+        />
       )}
 
       <form className="admin-panel admin-form" onSubmit={submit}>
@@ -131,9 +166,9 @@ export default function AdminStoreInfo() {
         </div>
 
         <div className="admin-form__actions">
-          <button type="submit" className="btn btn--primary" disabled={saving}>
+          <Button type="submit" variant="primary" loading={saving}>
             {saving ? 'Saving…' : 'Save store information'}
-          </button>
+          </Button>
           {values.free_delivery_over ? (
             <span className="muted">
               Free delivery above {formatPrice(values.free_delivery_over)} · inside Dhaka{' '}

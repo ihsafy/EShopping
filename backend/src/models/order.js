@@ -1,13 +1,26 @@
 'use strict';
 
 const { query, queryOne, transaction } = require('../config/db');
-const { money, buildOrderNumber } = require('../utils/helpers');
+const {
+  money,
+  buildOrderNumber,
+  ORDER_STATUSES,
+  ORDER_STATUS_LABELS,
+  normaliseOrderStatus,
+} = require('../utils/helpers');
 
 const ORDER_SELECT = `
   SELECT o.*, u.name AS account_name
   FROM orders o
   LEFT JOIN users u ON u.id = o.user_id
 `;
+
+/**
+ * SQL fragment that is true for cancelled orders regardless of the spelling or
+ * casing stored in the column, so revenue/top-product maths can never silently
+ * count a cancelled order as revenue.
+ */
+const NOT_CANCELLED_SQL = "LOWER(TRIM(o.order_status)) NOT IN ('cancelled', 'canceled')";
 
 const ITEMS_SELECT = `
   SELECT oi.*, p.slug AS product_slug, p.stock AS current_stock
@@ -36,7 +49,7 @@ const list = async ({ page = 1, limit = 20, status = '', userId = null, search =
 
   if (status) {
     filters.push('o.order_status = ?');
-    params.push(status);
+    params.push(normaliseOrderStatus(status));
   }
   if (userId) {
     filters.push('o.user_id = ?');
@@ -194,9 +207,10 @@ const create = async ({
 };
 
 const updateStatus = async (id, status, note = null) => {
+  const next = normaliseOrderStatus(status);
   await query(
     "UPDATE orders SET order_status = ?, status_note = ?, payment_status = IF(? = 'delivered' AND payment_method = 'cod', 'paid', payment_status) WHERE id = ?",
-    [status, note, status, id]
+    [next, note, next, id]
   );
   return findById(id);
 };
@@ -232,6 +246,54 @@ const countByStatus = () =>
     `SELECT order_status, COUNT(*) AS total FROM orders GROUP BY order_status`
   ).then((rows) => rows.reduce((acc, row) => ({ ...acc, [row.order_status]: Number(row.total) }), {}));
 
+/**
+ * Authoritative "orders by status" figures.
+ *
+ * 1. The database is asked for the RAW `order_status` values first, so the
+ *    client can see exactly what is stored.
+ * 2. Every raw value is normalised (trim / lower-case / canceled-vs-cancelled)
+ *    and merged into the canonical pipeline buckets.
+ * 3. All six canonical statuses are always returned - a status with no orders
+ *    is reported as 0 instead of disappearing, so the chart and the numbers
+ *    can never drift apart.
+ *
+ * The totals are read from the rows, never derived, and always add up to the
+ * real order count.
+ */
+const statusBreakdown = async () => {
+  const rows = await query(
+    `SELECT order_status AS raw_status, COUNT(*) AS total
+     FROM orders
+     GROUP BY order_status`
+  );
+
+  const counts = new Map(ORDER_STATUSES.map((status) => [status, 0]));
+  const rawValues = [];
+  let total = 0;
+
+  rows.forEach((row) => {
+    const count = Number(row.total) || 0;
+    const status = normaliseOrderStatus(row.raw_status);
+    counts.set(status, (counts.get(status) || 0) + count);
+    total += count;
+    if (String(row.raw_status ?? '') !== status) {
+      rawValues.push({ raw: row.raw_status, mappedTo: status, total: count });
+    }
+  });
+
+  return {
+    total,
+    normalised: rawValues.length > 0,
+    remapped: rawValues,
+    items: ORDER_STATUSES.map((status) => ({
+      status,
+      label: ORDER_STATUS_LABELS[status],
+      total: counts.get(status) || 0,
+      share: total > 0 ? Number((((counts.get(status) || 0) / total) * 100).toFixed(1)) : 0,
+    })),
+  };
+};
+
 module.exports = {
   findById,
   findByNumber,
@@ -241,5 +303,7 @@ module.exports = {
   setCancelRequested,
   cancelOrder,
   countByStatus,
+  statusBreakdown,
   itemsForOrder,
+  NOT_CANCELLED_SQL,
 };

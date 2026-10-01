@@ -1,13 +1,21 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Helmet } from 'react-helmet-async';
 import toast from 'react-hot-toast';
-import { FiChevronLeft, FiChevronRight, FiSearch, FiTrash2, FiUserCheck, FiUserX, FiEye } from 'react-icons/fi';
+import { FiChevronLeft, FiChevronRight, FiSearch, FiTrash2, FiUserCheck, FiUserX, FiEye, FiUsers } from 'react-icons/fi';
 import Modal from '../../components/admin/Modal';
 import Confirm from '../../components/admin/Confirm';
+import Button from '../../components/ui/Button';
+import StatusPill from '../../components/ui/StatusPill';
+import EmptyState, { ErrorState } from '../../components/ui/EmptyState';
+import { SkeletonRow } from '../../components/ui/Skeleton';
 import { fetchAdminCustomers, fetchAdminCustomer, setCustomerStatus, deleteCustomer } from '../../services/admin';
 import { formatPrice, formatDate } from '../../utils/format';
 
 const LIMIT = 12;
+
+function AccountPill({ active }) {
+  return active ? <StatusPill tone="success" label="Active" /> : <StatusPill tone="danger" label="Disabled" />;
+}
 
 function CustomerDetail({ data, onClose, onChanged, onDelete }) {
   const [busy, setBusy] = useState(false);
@@ -36,17 +44,17 @@ function CustomerDetail({ data, onClose, onChanged, onDelete }) {
       wide
       footer={
         <>
-          <button type="button" className="btn btn--ghost" onClick={() => onDelete(customer)} disabled={busy}>
-            <FiTrash2 size={14} /> Delete
-          </button>
-          <button
-            type="button"
-            className={active ? 'btn btn--ghost' : 'btn btn--primary'}
+          <Button variant="ghost" icon={FiTrash2} onClick={() => onDelete(customer)} disabled={busy}>
+            Delete
+          </Button>
+          <Button
+            variant={active ? 'ghost' : 'primary'}
+            icon={active ? FiUserX : FiUserCheck}
             onClick={toggleStatus}
-            disabled={busy}
+            loading={busy}
           >
-            {busy ? 'Saving…' : active ? <><FiUserX size={14} /> Disable account</> : <><FiUserCheck size={14} /> Enable account</>}
-          </button>
+            {busy ? 'Saving…' : active ? 'Disable account' : 'Enable account'}
+          </Button>
         </>
       }
     >
@@ -63,9 +71,7 @@ function CustomerDetail({ data, onClose, onChanged, onDelete }) {
           <div className="admin-kpi admin-kpi--sm">
             <span className="admin-kpi__label">Status</span>
             <strong className="admin-kpi__value">
-              <span className="admin-pill" data-status={active ? 'delivered' : 'cancelled'}>
-                {customer.status}
-              </span>
+              <AccountPill active={active} />
             </strong>
           </div>
         </div>
@@ -107,9 +113,7 @@ function CustomerDetail({ data, onClose, onChanged, onDelete }) {
                     <td>{formatDate(order.created_at)}</td>
                     <td>{formatPrice(order.total)}</td>
                     <td>
-                      <span className="admin-pill" data-status={order.order_status}>
-                        {order.order_status}
-                      </span>
+                      <StatusPill status={order.order_status} />
                     </td>
                   </tr>
                 ))}
@@ -205,6 +209,11 @@ export default function AdminCustomers() {
   const total = Number(data?.total) || 0;
   const totalPages = Math.max(1, Math.ceil(total / LIMIT));
   const hasFilters = Boolean(filters.search || filters.status);
+  const resetFilters = () => {
+    setDraft({ search: '', status: '' });
+    setPage(1);
+    setFilters({ search: '', status: '' });
+  };
 
   return (
     <section className="admin-page">
@@ -222,12 +231,14 @@ export default function AdminCustomers() {
       <form className="admin-filters" onSubmit={applyFilters}>
         <input
           type="search"
+          className="input"
           value={draft.search}
           onChange={(event) => setDraft((prev) => ({ ...prev, search: event.target.value }))}
           placeholder="Search name, mobile or email"
           aria-label="Search customers"
         />
         <select
+          className="select"
           value={draft.status}
           onChange={(event) => setDraft((prev) => ({ ...prev, status: event.target.value }))}
           aria-label="Filter by status"
@@ -236,44 +247,51 @@ export default function AdminCustomers() {
           <option value="active">Active</option>
           <option value="disabled">Disabled</option>
         </select>
-        <button type="submit" className="btn btn--primary btn--sm">
-          <FiSearch size={14} /> Apply
-        </button>
+        <Button type="submit" variant="primary" size="sm" icon={FiSearch}>
+          Apply
+        </Button>
         {hasFilters && (
-          <button
-            type="button"
-            className="btn btn--ghost btn--sm"
-            onClick={() => {
-              setDraft({ search: '', status: '' });
-              setPage(1);
-              setFilters({ search: '', status: '' });
-            }}
-          >
+          <Button variant="ghost" size="sm" onClick={resetFilters}>
             Reset
-          </button>
+          </Button>
         )}
       </form>
 
-      {error && (
-        <div className="alert alert--error">
-          {error}{' '}
-          <button type="button" className="admin-linkbtn" onClick={load}>
-            Try again
-          </button>
-        </div>
+      {error && !data && (
+        <ErrorState title="Could not load customers" text={error} onRetry={load} retrying={loading} />
       )}
 
-      {loading && !data && <p className="muted admin-page__loading">Loading customers…</p>}
+      {loading && !data && (
+        <div className="admin-table-wrap">
+          <table className="admin-table admin-table--rows">
+            <tbody>
+              {Array.from({ length: 6 }, (_, i) => (
+                <SkeletonRow key={i} columns={6} />
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {data && (
         <>
           {rows.length === 0 ? (
-            <div className="admin-panel admin-empty">
-              <h2>{hasFilters ? 'No customers match these filters' : 'No customers yet'}</h2>
-              <p className="muted">
-                {hasFilters ? 'Adjust the search or filters and try again.' : 'Registered shoppers will appear here.'}
-              </p>
-            </div>
+            <EmptyState
+              icon={FiUsers}
+              title={hasFilters ? 'No customers match these filters' : 'No customers yet'}
+              text={
+                hasFilters
+                  ? 'Adjust the search or filters and try again.'
+                  : 'Registered shoppers will appear here.'
+              }
+              action={
+                hasFilters ? (
+                  <Button variant="outline" size="sm" onClick={resetFilters}>
+                    Clear filters
+                  </Button>
+                ) : null
+              }
+            />
           ) : (
             <div className="admin-table-wrap">
               <table className="admin-table admin-table--rows">
@@ -306,31 +324,28 @@ export default function AdminCustomers() {
                       <td>{Number(row.total_orders) || 0}</td>
                       <td>{formatPrice(row.total_spending)}</td>
                       <td>
-                        <span
-                          className="admin-pill"
-                          data-status={row.status === 'active' ? 'delivered' : 'cancelled'}
-                        >
-                          {row.status}
-                        </span>
+                        <AccountPill active={row.status === 'active'} />
                       </td>
                       <td>
                         <div className="admin-actions">
-                          <button
-                            type="button"
-                            className="btn btn--ghost btn--sm"
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            icon={FiEye}
                             onClick={() => openCustomer(row.id)}
                             aria-label={`View ${row.name}`}
                           >
-                            <FiEye size={13} /> View
-                          </button>
-                          <button
-                            type="button"
-                            className="btn btn--ghost btn--sm"
+                            View
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            icon={FiTrash2}
                             onClick={() => setConfirming(row)}
                             aria-label={`Delete ${row.name}`}
                           >
-                            <FiTrash2 size={13} /> Delete
-                          </button>
+                            Delete
+                          </Button>
                         </div>
                       </td>
                     </tr>
@@ -342,25 +357,27 @@ export default function AdminCustomers() {
 
           {rows.length > 0 && totalPages > 1 && (
             <div className="admin-pager">
-              <button
-                type="button"
-                className="btn btn--ghost btn--sm"
+              <Button
+                variant="ghost"
+                size="sm"
+                icon={FiChevronLeft}
                 disabled={page <= 1 || loading}
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
               >
-                <FiChevronLeft size={14} /> Previous
-              </button>
+                Previous
+              </Button>
               <span className="muted">
                 Page {page} of {totalPages} · {total} total
               </span>
-              <button
-                type="button"
-                className="btn btn--ghost btn--sm"
+              <Button
+                variant="ghost"
+                size="sm"
+                iconEnd={FiChevronRight}
                 disabled={page >= totalPages || loading}
                 onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
               >
-                Next <FiChevronRight size={14} />
-              </button>
+                Next
+              </Button>
             </div>
           )}
         </>

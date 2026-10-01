@@ -7,7 +7,15 @@ const crypto = require('crypto');
 const env = require('../config/env');
 const ApiError = require('../utils/ApiError');
 
-fs.mkdirSync(env.uploadDir, { recursive: true });
+// Runs at import time. A read-only or otherwise unusable directory must not
+// take the whole API down with it, so this warns and lets multer surface a
+// per-request error instead of crashing every route during a cold start.
+try {
+  fs.mkdirSync(env.uploadDir, { recursive: true });
+} catch (error) {
+  console.error(`[uploads] Cannot create ${env.uploadDir}: ${error.message}`);
+  console.error('[uploads] Image uploads will fail. Set UPLOAD_DIR to a writable location.\n');
+}
 
 const ALLOWED = {
   'image/jpeg': '.jpg',

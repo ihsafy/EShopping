@@ -11,18 +11,46 @@ const notify = require('../services/notifications');
 
 const BCRYPT_ROUNDS = 12;
 
-const shape = (user) => ({
-  id: user.id,
-  name: user.name,
-  mobile: user.mobile,
-  email: user.email || null,
-  role: user.role,
-  address: user.address || null,
-  city: user.city || null,
-  area: user.area || null,
-  avatar: user.avatar || null,
-  createdAt: user.created_at,
-});
+const shape = (user) => {
+  // A row can disappear between the credential check and the follow-up read
+  // (deleted or merged account). Fail with a clean 401 instead of letting
+  // `user.id` raise a TypeError that surfaces as a 500.
+  if (!user) throw ApiError.unauthorized('Account no longer exists');
+
+  return {
+    id: user.id,
+    name: user.name,
+    mobile: user.mobile,
+    email: user.email || null,
+    role: user.role,
+    address: user.address || null,
+    city: user.city || null,
+    area: user.area || null,
+    avatar: user.avatar || null,
+    createdAt: user.created_at,
+  };
+};
+
+/**
+ * Compares a submitted password against the stored hash.
+ *
+ * bcrypt.compare() throws on a null/undefined/non-string hash, which turns a
+ * bad credential attempt into a 500. A row whose hash is missing or malformed
+ * can never authenticate, so it is treated as a failed match.
+ */
+const verifyPassword = async (password, hash) => {
+  if (typeof hash !== 'string' || !/^\$2[aby]\$\d{2}\$/.test(hash)) {
+    console.error('[auth] unusable password_hash on account; refusing sign-in');
+    return false;
+  }
+
+  try {
+    return await bcrypt.compare(password, hash);
+  } catch (error) {
+    console.error('[auth] password comparison failed:', error.message);
+    return false;
+  }
+};
 
 /** POST /api/auth/register */
 const register = asyncHandler(async (req, res) => {
@@ -108,7 +136,7 @@ const login = asyncHandler(async (req, res) => {
     throw ApiError.forbidden('Your account has been disabled. Please contact support.');
   }
 
-  const matches = await bcrypt.compare(password, user.password_hash);
+  const matches = await verifyPassword(password, user.password_hash);
   if (!matches) throw ApiError.unauthorized('Incorrect mobile number or password');
 
   await userModel.touchLogin(user.id);
@@ -137,7 +165,7 @@ const adminLogin = asyncHandler(async (req, res) => {
     throw ApiError.forbidden('This admin account has been disabled');
   }
 
-  const matches = await bcrypt.compare(password, user.password_hash);
+  const matches = await verifyPassword(password, user.password_hash);
   if (!matches) throw ApiError.unauthorized('Incorrect admin credentials');
 
   await userModel.touchLogin(user.id);
@@ -176,7 +204,9 @@ const updateProfile = asyncHandler(async (req, res) => {
 const changePassword = asyncHandler(async (req, res) => {
   const { currentPassword, newPassword } = req.body;
   const row = await queryOne('SELECT password_hash FROM users WHERE id = ?', [req.user.id]);
-  const matches = await bcrypt.compare(currentPassword, row.password_hash);
+  if (!row) throw ApiError.unauthorized('Account no longer exists');
+
+  const matches = await verifyPassword(currentPassword, row.password_hash);
   if (!matches) throw ApiError.unauthorized('Your current password is incorrect');
 
   const passwordHash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);

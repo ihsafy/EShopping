@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useOutletContext } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import useAuth from '../context/useAuth';
+import AuthVisual from '../components/AuthVisual';
 import { login } from '../services/auth';
 
 export default function Login() {
   const { user, signIn } = useAuth();
+  const { store } = useOutletContext() || {};
   const navigate = useNavigate();
   const location = useLocation();
   const next = new URLSearchParams(location.search).get('next') || '/';
@@ -46,8 +48,11 @@ export default function Login() {
         <title>Sign in | EShopping</title>
       </Helmet>
 
-      <div className="auth__card">
-        <h1>Welcome back</h1>
+      <div className="auth__split">
+        <AuthVisual store={store} />
+        <section className="auth__panel">
+          <div className="auth__card">
+            <h1>Welcome back</h1>
         <p className="muted">Sign in to buy, track your orders and sync your wishlist.</p>
 
         {banner && <div className="alert alert--error">{banner}</div>}
@@ -90,9 +95,11 @@ export default function Login() {
           </p>
         )}
 
-        <p className="auth__alt">
-          New to EShopping? <Link to={`/register${suffix}`}>Create an account</Link>
-        </p>
+            <p className="auth__alt">
+              New to EShopping? <Link to={`/register${suffix}`}>Create an account</Link>
+            </p>
+          </div>
+        </section>
       </div>
     </div>
   );

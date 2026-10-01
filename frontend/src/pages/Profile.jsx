@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 import {
   FiHeart,
   FiMapPin,
+  FiMessageCircle,
   FiPackage,
   FiShoppingCart,
   FiTruck,
@@ -13,6 +14,7 @@ import {
 import useAuth from '../context/useAuth';
 import { fetchProfileSummary } from '../services/profile';
 import { StatusPill } from '../components/OrderStatus';
+import UserVouchers from '../components/UserVouchers';
 import { formatPrice, formatDate } from '../utils/format';
 
 export default function Profile() {
@@ -75,6 +77,9 @@ export default function Profile() {
           </p>
         </div>
         <div className="profile-card__actions">
+          <Link to="/chat" className="btn btn--ghost btn--sm">
+            <FiMessageCircle size={14} /> Support chat
+          </Link>
           <Link to="/profile/change-password" className="btn btn--ghost btn--sm">
             Change password
           </Link>
@@ -117,6 +122,8 @@ export default function Profile() {
               </Link>
             ))}
           </div>
+
+          <UserVouchers />
 
           <section className="panel">
             <div className="panel__head">

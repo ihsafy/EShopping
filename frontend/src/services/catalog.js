@@ -15,6 +15,13 @@ export const fetchBanners = () =>
 export const fetchCategories = () =>
   cached('categories', async () => (await api.get('/categories')).data.categories || [], 60 * 1000);
 
+/**
+ * Active admin-created promo codes, shared by the storefront notice bar and the
+ * /profile vouchers card so both always show the same live codes.
+ */
+export const fetchActivePromotions = () =>
+  cached('promotions', async () => (await api.get('/promotions/active')).data.promotions || [], 60 * 1000);
+
 export const fetchProducts = (params = {}) =>
   dedupe(`products:${JSON.stringify(params)}`, async () => (await api.get('/products', { params })).data);
 

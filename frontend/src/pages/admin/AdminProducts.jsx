@@ -1,10 +1,14 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Helmet } from 'react-helmet-async';
 import toast from 'react-hot-toast';
-import { FiChevronLeft, FiChevronRight, FiEdit2, FiPlus, FiSearch, FiTrash2 } from 'react-icons/fi';
+import { FiChevronLeft, FiChevronRight, FiEdit2, FiPlus, FiPackage, FiSearch, FiTrash2 } from 'react-icons/fi';
 import Modal from '../../components/admin/Modal';
 import Confirm from '../../components/admin/Confirm';
 import ImagePicker from '../../components/admin/ImagePicker';
+import Button from '../../components/ui/Button';
+import StatusPill from '../../components/ui/StatusPill';
+import EmptyState, { ErrorState } from '../../components/ui/EmptyState';
+import { SkeletonRow } from '../../components/ui/Skeleton';
 import {
   fetchAdminProducts,
   fetchAdminProduct,
@@ -154,12 +158,12 @@ function ProductForm({ open, product, categories, onClose, onSaved }) {
       wide
       footer={
         <>
-          <button type="button" className="btn btn--ghost" onClick={onClose} disabled={saving}>
+          <Button variant="ghost" onClick={onClose} disabled={saving}>
             Cancel
-          </button>
-          <button type="submit" form="product-form" className="btn btn--primary" disabled={saving}>
+          </Button>
+          <Button type="submit" form="product-form" variant="primary" loading={saving}>
             {saving ? 'Saving…' : editing ? 'Save changes' : 'Create product'}
-          </button>
+          </Button>
         </>
       }
     >
@@ -394,9 +398,9 @@ export default function AdminProducts() {
             {loading ? 'Loading products…' : `${pagination.total ?? products.length} product(s) in the catalogue`}
           </p>
         </div>
-        <button type="button" className="btn btn--primary" onClick={openCreate}>
-          <FiPlus size={15} /> Add product
-        </button>
+        <Button variant="primary" icon={FiPlus} onClick={openCreate}>
+          Add product
+        </Button>
       </div>
 
       <form className="admin-filters" onSubmit={applyFilters}>
@@ -437,47 +441,55 @@ export default function AdminProducts() {
           <option value="in_stock">In stock</option>
           <option value="out_of_stock">Out of stock</option>
         </select>
-        <button type="submit" className="btn btn--primary btn--sm">
-          <FiSearch size={14} /> Apply
-        </button>
+        <Button type="submit" variant="primary" size="sm" icon={FiSearch}>
+          Apply
+        </Button>
         {hasFilters && (
-          <button type="button" className="btn btn--ghost btn--sm" onClick={clearFilters}>
+          <Button variant="ghost" size="sm" onClick={clearFilters}>
             Reset
-          </button>
+          </Button>
         )}
       </form>
 
-      {error && (
-        <div className="alert alert--error">
-          {error}{' '}
-          <button type="button" className="admin-linkbtn" onClick={load}>
-            Try again
-          </button>
-        </div>
+      {error && !data && (
+        <ErrorState title="Could not load products" text={error} onRetry={load} retrying={loading} />
       )}
 
-      {loading && !data && <p className="muted admin-page__loading">Loading products…</p>}
+      {loading && !data && (
+        <div className="admin-table-wrap">
+          <table className="admin-table admin-table--rows">
+            <tbody>
+              {Array.from({ length: 6 }, (_, i) => (
+                <SkeletonRow key={i} columns={7} />
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {data && (
         <>
           {products.length === 0 ? (
-            <div className="admin-panel admin-empty">
-              <h2>{hasFilters ? 'No products match these filters' : 'No products yet'}</h2>
-              <p className="muted">
-                {hasFilters
+            <EmptyState
+              icon={FiPackage}
+              title={hasFilters ? 'No products match these filters' : 'No products yet'}
+              text={
+                hasFilters
                   ? 'Adjust the search or filters and try again.'
-                  : 'Add your first product to start selling.'}
-              </p>
-              {hasFilters ? (
-                <button type="button" className="btn btn--ghost" onClick={clearFilters}>
-                  Clear filters
-                </button>
-              ) : (
-                <button type="button" className="btn btn--primary" onClick={openCreate}>
-                  <FiPlus size={15} /> Add product
-                </button>
-              )}
-            </div>
+                  : 'Add your first product to start selling.'
+              }
+              action={
+                hasFilters ? (
+                  <Button variant="outline" size="sm" onClick={clearFilters}>
+                    Clear filters
+                  </Button>
+                ) : (
+                  <Button variant="primary" size="sm" icon={FiPlus} onClick={openCreate}>
+                    Add product
+                  </Button>
+                )
+              }
+            />
           ) : (
             <div className="admin-table-wrap">
               <table className="admin-table admin-table--rows">
@@ -523,29 +535,30 @@ export default function AdminProducts() {
                         </span>
                       </td>
                       <td>
-                        <span className="admin-pill" data-status={product.status === 'active' ? 'delivered' : 'cancelled'}>
-                          {product.status}
-                        </span>
+                        <StatusPill status={product.status} />
                       </td>
                       <td>{formatDate(product.created_at)}</td>
                       <td>
                         <div className="admin-actions">
-                          <button
-                            type="button"
-                            className="btn btn--ghost btn--sm"
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            icon={FiEdit2}
                             onClick={() => openEdit(product)}
                             aria-label={`Edit ${product.name}`}
                           >
-                            <FiEdit2 size={13} /> Edit
-                          </button>
-                          <button
-                            type="button"
-                            className="btn btn--ghost btn--sm admin-actions__danger"
+                            Edit
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            icon={FiTrash2}
+                            className="admin-actions__danger"
                             onClick={() => setConfirming(product)}
                             aria-label={`Delete ${product.name}`}
                           >
-                            <FiTrash2 size={13} /> Delete
-                          </button>
+                            Delete
+                          </Button>
                         </div>
                       </td>
                     </tr>
@@ -557,25 +570,27 @@ export default function AdminProducts() {
 
           {products.length > 0 && totalPages > 1 && (
             <div className="admin-pager">
-              <button
-                type="button"
-                className="btn btn--ghost btn--sm"
+              <Button
+                variant="ghost"
+                size="sm"
+                icon={FiChevronLeft}
                 disabled={page <= 1 || loading}
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
               >
-                <FiChevronLeft size={14} /> Previous
-              </button>
+                Previous
+              </Button>
               <span className="muted">
                 Page {pagination.page || page} of {totalPages} · {pagination.total} total
               </span>
-              <button
-                type="button"
-                className="btn btn--ghost btn--sm"
+              <Button
+                variant="ghost"
+                size="sm"
+                iconEnd={FiChevronRight}
                 disabled={page >= totalPages || loading}
                 onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
               >
-                Next <FiChevronRight size={14} />
-              </button>
+                Next
+              </Button>
             </div>
           )}
         </>

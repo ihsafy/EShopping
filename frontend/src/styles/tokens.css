@@ -1,0 +1,303 @@
+/* ==========================================================================
+   EShopping design system - tokens
+   --------------------------------------------------------------------------
+   Single source of truth for colour, type, spacing, radius, elevation,
+   motion and layering. Nothing below this file may hard-code a hex value,
+   a shadow or a duration - if a value is needed twice it lives here.
+
+   Breakpoints (used literally in the media queries further down, CSS cannot
+   read custom properties inside @media):
+     xs  360   sm  430   md  640   lg  900   xl  1080   2xl  1280   3xl  1440
+   ========================================================================== */
+
+:root {
+  color-scheme: light;
+
+  /* ---- neutrals ------------------------------------------------------- */
+  --c-bg: #f6f6f8;
+  --c-bg-alt: #f0f0f3;
+  --c-surface: #ffffff;
+  --c-surface-2: #fbfbfc;
+  --c-surface-3: #f4f4f6;
+  --c-surface-inset: #f5f5f7;
+  --c-overlay: rgb(16 18 24 / 0.42);
+
+  /* WCAG AAA typography: slate-950 / slate-800 / slate-700 on white. */
+  --c-text: #020617;
+  --c-text-2: #1e293b;
+  --c-text-3: #334155;
+  --c-text-invert: #ffffff;
+
+  /* Sharper container bounds so colour-blind users can see edges (slate-300). */
+  --c-line: #cbd5e1;
+  --c-line-2: #b8c4d3;
+  --c-line-strong: #94a3b8;
+
+  /* ---- brand / accent -------------------------------------------------- */
+  --c-accent: #4a49d4;
+  --c-accent-hover: #3c3bba;
+  --c-accent-fg: #ffffff;
+  --c-accent-soft: #eeeefd;
+  --c-accent-soft-hover: #e4e4fb;
+  --c-accent-line: #c9c8f5;
+  --c-accent-text: #3b3ab8;
+
+  /* Constant brand gradient for the vector logo badge (theme-independent). */
+  --c-brand-1: #4a49d4;
+  --c-brand-2: #7c5cf0;
+  --c-brand-shadow: rgb(74 73 212 / 0.3);
+
+  /* Primary action colour: near-black in light mode, near-white in dark.
+     This is what makes the storefront read as premium instead of "indigo app". */
+  --c-ink: #101319;
+  --c-ink-hover: #262c37;
+  --c-ink-fg: #ffffff;
+  --c-ink-soft: #ececf0;
+
+  /* ---- semantic status ------------------------------------------------- */
+  --c-success: #0f7a52;
+  --c-success-soft: #dcf5e9;
+  --c-success-line: #a9e4c8;
+  --c-warning: #a35b06;
+  --c-warning-soft: #fdf0d9;
+  --c-warning-line: #f4d09a;
+  --c-danger: #c2263c;
+  --c-danger-hover: #a51c2f;
+  --c-danger-soft: #fdeaec;
+  --c-danger-line: #f6c3ca;
+  --c-info: #1a5fc4;
+  --c-info-soft: #e2ecfc;
+  --c-info-line: #b8d1f6;
+
+  /* ---- order status palette (shared by chart, pills and badges) -------- */
+  --st-pending: #d98218;
+  --st-pending-soft: #fdf1de;
+  --st-pending-line: #f3d5a4;
+  --st-pending-text: #8f5307;
+
+  --st-confirmed: #2a6fd6;
+  --st-confirmed-soft: #e5eefb;
+  --st-confirmed-line: #bcd6f4;
+  --st-confirmed-text: #1b4f9e;
+
+  --st-processing: #6d4fd0;
+  --st-processing-soft: #eee9fb;
+  --st-processing-line: #cfc0f0;
+  --st-processing-text: #4e339e;
+
+  --st-shipped: #0d8798;
+  --st-shipped-soft: #ddf2f5;
+  --st-shipped-line: #a6dbe3;
+  --st-shipped-text: #0a6572;
+
+  --st-delivered: #12855c;
+  --st-delivered-soft: #ddf4e9;
+  --st-delivered-line: #a5dfc5;
+  --st-delivered-text: #0c6746;
+
+  --st-cancelled: #cf3a52;
+  --st-cancelled-soft: #fdeaed;
+  --st-cancelled-line: #f5c2ca;
+  --st-cancelled-text: #9c2438;
+
+  /* ---- chart series (categorical, light mode) -------------------------- */
+  --chart-1: #4a49d4;
+  --chart-2: #0d8798;
+  --chart-3: #d98218;
+  --chart-4: #7c4ad4;
+  --chart-5: #12855c;
+  --chart-6: #cf3a52;
+  --chart-grid: rgb(13 15 20 / 0.07);
+  --chart-axis: #767d8c;
+  --chart-track: #ececf1;
+  --chart-surface: #ffffff;
+
+  /* ---- typography ------------------------------------------------------ */
+  --font-sans: 'Inter var', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI',
+    system-ui, Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: ui-monospace, 'SFMono-Regular', 'JetBrains Mono', Menlo, Consolas, monospace;
+  --font-num: 'Inter var', 'Inter', -apple-system, 'Segoe UI', system-ui, sans-serif;
+
+  --fs-100: 0.6875rem; /* 11px - micro labels, table heads   */
+  --fs-200: 0.75rem;   /* 12px - meta, helper text           */
+  --fs-300: 0.8125rem; /* 13px - dense UI                    */
+  --fs-400: 0.875rem;  /* 14px - body default                */
+  --fs-500: 0.9375rem; /* 15px - emphasised body             */
+  --fs-600: 1rem;      /* 16px - card titles                 */
+  --fs-700: 1.125rem;  /* 18px                               */
+  --fs-800: 1.375rem;  /* 22px - section titles              */
+  --fs-900: 1.75rem;   /* 28px - page titles                 */
+  --fs-1000: clamp(2rem, 1.4rem + 2.4vw, 3rem); /* hero    */
+
+  --lh-tight: 1.2;
+  --lh-snug: 1.35;
+  --lh-base: 1.55;
+  --lh-loose: 1.7;
+
+  --tracking-tight: -0.02em;
+  --tracking-tight-lg: -0.03em;
+  --tracking-wide: 0.08em;
+
+  --fw-regular: 400;
+  --fw-medium: 500;
+  --fw-semibold: 600;
+  --fw-bold: 700;
+
+  /* ---- spacing (4px base) --------------------------------------------- */
+  --sp-0: 0;
+  --sp-1: 0.25rem;
+  --sp-2: 0.5rem;
+  --sp-3: 0.75rem;
+  --sp-4: 1rem;
+  --sp-5: 1.25rem;
+  --sp-6: 1.5rem;
+  --sp-8: 2rem;
+  --sp-10: 2.5rem;
+  --sp-12: 3rem;
+  --sp-16: 4rem;
+  --sp-20: 5rem;
+
+  --section-gap: clamp(2.5rem, 1.5rem + 3.5vw, 4.5rem);
+  --page-pad: clamp(1rem, 0.6rem + 1.6vw, 2rem);
+
+  /* ---- radius ---------------------------------------------------------- */
+  --r-xs: 5px;
+  --r-sm: 7px;
+  --r-md: 10px;
+  --r-lg: 14px;
+  --r-xl: 20px;
+  --r-2xl: 28px;
+  --r-3xl: 24px;
+  --r-pill: 999px;
+
+  /* ---- elevation (layered, low-contrast) ------------------------------- */
+  --e-0: none;
+  --e-1: 0 1px 2px rgb(13 15 20 / 0.04);
+  --e-2: 0 1px 2px rgb(13 15 20 / 0.05), 0 2px 6px rgb(13 15 20 / 0.04);
+  --e-3: 0 2px 4px rgb(13 15 20 / 0.05), 0 8px 20px rgb(13 15 20 / 0.07);
+  --e-4: 0 4px 8px rgb(13 15 20 / 0.06), 0 18px 40px rgb(13 15 20 / 0.1);
+  --e-5: 0 8px 16px rgb(13 15 20 / 0.08), 0 32px 72px rgb(13 15 20 / 0.18);
+  --e-focus: 0 0 0 3px color-mix(in srgb, var(--c-accent) 28%, transparent);
+
+  /* ---- motion ---------------------------------------------------------- */
+  --t-instant: 90ms;
+  --t-fast: 150ms;
+  --t-base: 200ms;
+  --t-slow: 280ms;
+  --t-slower: 420ms;
+  --ease-out: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+
+  /* ---- layout ---------------------------------------------------------- */
+  --container: 1280px;
+  --container-narrow: 760px;
+  --header-h: 68px;
+  --header-h-compact: 60px;
+  --z-base: 1;
+  --z-sticky: 20;
+  --z-header: 40;
+  --z-dropdown: 60;
+  --z-drawer: 70;
+  --z-modal: 90;
+  --z-toast: 100;
+  --z-viewer: 120;
+}
+
+/* ==========================================================================
+   Dark theme - proper surfaces, borders and text hierarchy (not an inversion)
+   ========================================================================== */
+[data-theme='dark'] {
+  color-scheme: dark;
+
+  --c-bg: #0a0b0e;
+  --c-bg-alt: #0f1014;
+  --c-surface: #141619;
+  --c-surface-2: #191b20;
+  --c-surface-3: #1f222a;
+  --c-surface-inset: #101216;
+  --c-overlay: rgb(0 0 0 / 0.62);
+
+  --c-text: #ffffff;
+  --c-text-2: #e2e8f0;
+  --c-text-3: #94a3b8;
+  --c-text-invert: #0a0b0e;
+
+  --c-line: #24262d;
+  --c-line-2: #2e313a;
+  --c-line-strong: #3b3f4a;
+
+  --c-accent: #8f8ef7;
+  --c-accent-hover: #a5a4fa;
+  --c-accent-fg: #10101f;
+  --c-accent-soft: #1c1d33;
+  --c-accent-soft-hover: #242543;
+  --c-accent-line: #35356a;
+  --c-accent-text: #b0affb;
+
+  --c-ink: #f4f5f7;
+  --c-ink-hover: #ffffff;
+  --c-ink-fg: #0a0b0e;
+  --c-ink-soft: #22252c;
+
+  --c-success: #34d399;
+  --c-success-soft: #0e2a20;
+  --c-success-line: #1d5540;
+  --c-warning: #f0b357;
+  --c-warning-soft: #2c2213;
+  --c-warning-line: #5a4526;
+  --c-danger: #fb7185;
+  --c-danger-hover: #fda4af;
+  --c-danger-soft: #2e1418;
+  --c-danger-line: #632a33;
+  --c-info: #60a5fa;
+  --c-info-soft: #12233a;
+  --c-info-line: #24436b;
+
+  --st-pending: #f0b357;
+  --st-pending-soft: #2b2213;
+  --st-pending-line: #574322;
+  --st-pending-text: #f5c987;
+
+  --st-confirmed: #60a5fa;
+  --st-confirmed-soft: #12223a;
+  --st-confirmed-line: #234a75;
+  --st-confirmed-text: #93c2fd;
+
+  --st-processing: #a78bfa;
+  --st-processing-soft: #1f1836;
+  --st-processing-line: #3f3169;
+  --st-processing-text: #c3b1fd;
+
+  --st-shipped: #22d3ee;
+  --st-shipped-soft: #0c2a30;
+  --st-shipped-line: #1a515c;
+  --st-shipped-text: #7ee6f5;
+
+  --st-delivered: #34d399;
+  --st-delivered-soft: #0c2a20;
+  --st-delivered-line: #1a5640;
+  --st-delivered-text: #7fe7c2;
+
+  --st-cancelled: #fb7185;
+  --st-cancelled-soft: #2f141a;
+  --st-cancelled-line: #652a35;
+  --st-cancelled-text: #fda4af;
+
+  --chart-1: #8f8ef7;
+  --chart-2: #22d3ee;
+  --chart-3: #f0b357;
+  --chart-4: #a78bfa;
+  --chart-5: #34d399;
+  --chart-6: #fb7185;
+  --chart-grid: rgb(255 255 255 / 0.07);
+  --chart-axis: #868d9c;
+  --chart-track: #24262d;
+  --chart-surface: #141619;
+
+  --e-1: 0 1px 2px rgb(0 0 0 / 0.4);
+  --e-2: 0 1px 2px rgb(0 0 0 / 0.4), 0 2px 6px rgb(0 0 0 / 0.3);
+  --e-3: 0 2px 4px rgb(0 0 0 / 0.4), 0 8px 20px rgb(0 0 0 / 0.45);
+  --e-4: 0 4px 8px rgb(0 0 0 / 0.45), 0 18px 40px rgb(0 0 0 / 0.55);
+  --e-5: 0 8px 16px rgb(0 0 0 / 0.5), 0 32px 72px rgb(0 0 0 / 0.7);
+}

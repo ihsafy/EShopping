@@ -7,7 +7,7 @@ const productModel = require('../../models/product');
 const settings = require('../../services/settings');
 const notifications = require('../../services/notifications');
 const activityLog = require('../../services/activityLog');
-const { ORDER_STATUSES, PURCHASE_STATUSES } = require('../../utils/helpers');
+const { ORDER_STATUSES, PURCHASE_STATUSES, normaliseOrderStatus } = require('../../utils/helpers');
 const asyncHandler = require('../../utils/asyncHandler');
 const ApiError = require('../../utils/ApiError');
 const { query } = require('../../config/db');
@@ -34,13 +34,18 @@ const detail = asyncHandler(async (req, res) => {
 
 /** PUT /api/admin/orders/:id/status */
 const updateStatus = asyncHandler(async (req, res) => {
-  const { status, note } = req.body;
+  const { note } = req.body;
+  // Any spelling the UI or a script sends is folded into the canonical
+  // pipeline status before it is compared or stored.
+  const status = normaliseOrderStatus(req.body.status);
   if (!ORDER_STATUSES.includes(status)) throw ApiError.badRequest('Invalid order status');
 
   const order = await orderModel.findById(req.params.id);
   if (!order) throw ApiError.notFound('Order not found');
-  if (order.order_status === status) throw ApiError.badRequest(`Order is already ${status}`);
-  if (order.order_status === 'cancelled') {
+
+  const current = normaliseOrderStatus(order.order_status);
+  if (current === status) throw ApiError.badRequest(`Order is already ${status}`);
+  if (current === 'cancelled') {
     throw ApiError.badRequest('A cancelled order cannot change status');
   }
 
@@ -50,7 +55,7 @@ const updateStatus = asyncHandler(async (req, res) => {
   await activityLog.log(
     req.user,
     'order_status',
-    `${order.order_number}: ${order.order_status} -> ${status}`
+    `${order.order_number}: ${normaliseOrderStatus(order.order_status)} -> ${status}`
   );
 
   await notifications.notifyOrderStatus(updated, note || null);

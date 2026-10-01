@@ -2,6 +2,9 @@ import { useEffect, useState } from 'react';
 import { Helmet } from 'react-helmet-async';
 import toast from 'react-hot-toast';
 import ImagePicker from '../../components/admin/ImagePicker';
+import Button from '../../components/ui/Button';
+import { ErrorState } from '../../components/ui/EmptyState';
+import { Skeleton } from '../../components/ui/Skeleton';
 import { fetchAdminSettings, saveSettings, uploadImages } from '../../services/admin';
 
 export default function AdminBranding() {
@@ -64,7 +67,46 @@ export default function AdminBranding() {
     }
   };
 
-  if (loading) return <p className="muted admin-page__loading">Loading branding…</p>;
+  if (loading)
+    return (
+      <section className="admin-page" aria-busy="true">
+        <div className="admin-page__head">
+          <div>
+            <Skeleton className="skeleton-title" width={180} />
+            <Skeleton className="skeleton-text" width="46%" />
+          </div>
+        </div>
+        <div className="admin-panel">
+          <div className="admin-form">
+            <div className="admin-branding__preview">
+              <Skeleton height={64} width={220} radius="var(--r-md)" />
+              <Skeleton className="skeleton-text" width={140} />
+              <Skeleton height={34} width={34} radius="var(--r-sm)" />
+              <Skeleton className="skeleton-text" width={170} />
+            </div>
+            <div className="admin-form__row">
+              {['store_name', 'store_tagline'].map((key) => (
+                <div className="admin-field admin-field--grow" key={key}>
+                  <Skeleton className="skeleton-text" width="30%" />
+                  <Skeleton height={42} radius="var(--r-md)" />
+                </div>
+              ))}
+            </div>
+            <div className="admin-form__row">
+              {['store_logo', 'store_favicon'].map((key) => (
+                <div className="admin-field" key={key}>
+                  <Skeleton className="skeleton-text" width="28%" />
+                  <Skeleton height={112} radius="var(--r-md)" />
+                </div>
+              ))}
+            </div>
+            <div className="admin-form__actions">
+              <Skeleton height={42} width={160} radius="var(--r-md)" />
+            </div>
+          </div>
+        </div>
+      </section>
+    );
 
   return (
     <section className="admin-page">
@@ -80,16 +122,12 @@ export default function AdminBranding() {
       </div>
 
       {error && (
-        <div className="alert alert--error">
-          {error}{' '}
-          <button
-            type="button"
-            className="admin-linkbtn"
-            onClick={() => window.location.reload()}
-          >
-            Reload
-          </button>
-        </div>
+        <ErrorState
+          title="Could not load the branding"
+          text={error}
+          onRetry={() => window.location.reload()}
+          retrying={loading}
+        />
       )}
 
       <div className="admin-panel">
@@ -162,9 +200,9 @@ export default function AdminBranding() {
           </div>
 
           <div className="admin-form__actions">
-            <button type="submit" className="btn btn--primary" disabled={saving}>
+            <Button type="submit" variant="primary" loading={saving}>
               {saving ? 'Saving…' : 'Save branding'}
-            </button>
+            </Button>
             <span className="muted">Customers see the new logo immediately on their next page load.</span>
           </div>
         </form>

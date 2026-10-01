@@ -70,6 +70,34 @@ const store = asyncHandler(async (req, res) => {
   });
 });
 
+/**
+ * GET /api/promotions
+ * Public, currently-runnable coupon codes used by the storefront notice bar.
+ * Only safe fields are exposed - never usage counters or internal ids.
+ */
+const promotions = asyncHandler(async (req, res) => {
+  const now = new Date();
+  const coupons = await couponModel.list({ onlyActive: true });
+  const usable = coupons
+    .filter((coupon) => {
+      if (coupon.start_date && new Date(coupon.start_date) > now) return false;
+      if (coupon.expiry_date && new Date(coupon.expiry_date) < now) return false;
+      if (coupon.usage_limit !== null && coupon.used_count >= coupon.usage_limit) return false;
+      return true;
+    })
+    .map((coupon) => ({
+      code: coupon.code,
+      description: coupon.description || '',
+      discountType: coupon.discount_type,
+      discountValue: Number(coupon.discount_value),
+      minimumOrder: Number(coupon.minimum_order) || 0,
+      expiryDate: coupon.expiry_date || null,
+    }))
+    .sort((a, b) => b.discountValue - a.discountValue);
+
+  res.json({ success: true, data: { promotions: usable } });
+});
+
 /** POST /api/coupons/validate */
 const validateCoupon = asyncHandler(async (req, res) => {
   const { code, subtotal } = req.body;
@@ -86,4 +114,4 @@ const validateCoupon = asyncHandler(async (req, res) => {
   });
 });
 
-module.exports = { list, detail, products, subcategories, banners, store, validateCoupon };
+module.exports = { list, detail, products, subcategories, banners, store, promotions, validateCoupon };

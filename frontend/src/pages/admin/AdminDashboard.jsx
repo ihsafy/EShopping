@@ -1,11 +1,9 @@
-import { useCallback, useEffect, useState } from 'react';
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import {
   Area,
   AreaChart,
-  Bar,
-  BarChart,
   CartesianGrid,
   Cell,
   Pie,
@@ -15,9 +13,25 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { FiRefreshCw, FiAlertTriangle, FiTrendingUp } from 'react-icons/fi';
-import { fetchAdminDashboard, fetchRevenueSeries, fetchOrderAnalytics, fetchProductAnalytics } from '../../services/admin';
+import {
+  FiAlertTriangle,
+  FiBox,
+  FiDollarSign,
+  FiRefreshCw,
+  FiShoppingBag,
+  FiTrendingUp,
+  FiUsers,
+} from 'react-icons/fi';
+import {
+  fetchAdminDashboard,
+  fetchRevenueSeries,
+  fetchProductAnalytics,
+} from '../../services/admin';
 import { formatPrice, formatDate } from '../../utils/format';
+import StatusPill from '../../components/ui/StatusPill';
+import EmptyState, { ErrorState } from '../../components/ui/EmptyState';
+import CountUp from '../../components/ui/CountUp';
+import { Skeleton, SkeletonText, SkeletonTable } from '../../components/ui/Skeleton';
 
 const count = (value) => Number(value || 0).toLocaleString('en-US');
 
@@ -25,32 +39,87 @@ const PERIODS = [
   { key: 'week', label: '7 days' },
   { key: '30d', label: '30 days' },
   { key: '6m', label: '6 months' },
+  { key: 'all', label: 'All time' },
 ];
 
-const STATUS_COLORS = {
-  pending: '#f59e0b',
-  confirmed: '#3b82f6',
-  processing: '#8b5cf6',
-  shipped: '#06b6d4',
-  delivered: '#10b981',
-  cancelled: '#ef4444',
+/**
+ * Donut colours are read from the same CSS variables the status pills use, so
+ * the chart, the legend and the order tables can never disagree on a colour.
+ * Values are resolved once per theme change via getComputedStyle.
+ */
+const STATUS_VAR = {
+  pending: '--st-pending',
+  confirmed: '--st-confirmed',
+  processing: '--st-processing',
+  shipped: '--st-shipped',
+  delivered: '--st-delivered',
+  cancelled: '--st-cancelled',
 };
 
-const CATEGORY_COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#06b6d4', '#8b5cf6', '#ec4899', '#84cc16'];
+function useChartTokens() {
+  const [tokens, setTokens] = useState(() => readTokens());
 
-const moneyTick = (value) => `৳${Number(value).toLocaleString('en-US')}`;
+  useEffect(() => {
+    const observer = new MutationObserver(() => setTokens(readTokens()));
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    return () => observer.disconnect();
+  }, []);
 
-function ChartTooltip({ active, payload, label }) {
+  return tokens;
+}
+
+function readTokens() {
+  if (typeof window === 'undefined') {
+    return { status: {}, grid: '#e7e7ec', axis: '#767d8c', track: '#ececf1', accent: '#4a49d4' };
+  }
+  const style = getComputedStyle(document.documentElement);
+  const read = (name, fallback) => style.getPropertyValue(name).trim() || fallback;
+  return {
+    status: Object.fromEntries(
+      Object.entries(STATUS_VAR).map(([key, variable]) => [key, read(variable, '#767d8c')])
+    ),
+    grid: read('--chart-grid', 'rgba(13,15,20,.07)'),
+    axis: read('--chart-axis', '#767d8c'),
+    track: read('--chart-track', '#ececf1'),
+    accent: read('--chart-1', '#4a49d4'),
+  };
+}
+
+function compactTick(value) {
+  const n = Number(value) || 0;
+  if (n >= 1_000_000) return `৳${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `৳${(n / 1_000).toFixed(n >= 10_000 ? 0 : 1)}k`;
+  return `৳${n}`;
+}
+
+function ChartTooltip({ active, payload, label, money = false }) {
   if (!active || !payload?.length) return null;
   return (
     <div className="admin-chart__tip">
-      {label !== undefined && <strong>{label}</strong>}
+      {label !== undefined && label !== '' && <b>{label}</b>}
       {payload.map((entry) => (
-        <span key={entry.dataKey || entry.name} style={{ color: entry.color || entry.fill }}>
-          {entry.name}: {typeof entry.value === 'number' && entry.dataKey === 'revenue' ? formatPrice(entry.value) : count(entry.value)}
+        <span key={entry.dataKey || entry.name} style={{ color: entry.payload?.fill || entry.color }}>
+          {entry.name}: {money ? formatPrice(entry.value) : count(entry.value)}
         </span>
       ))}
     </div>
+  );
+}
+
+function MetricCard({ icon: Icon, label, value, hint, moneyValue = false, tone }) {
+  return (
+    <article className={`admin-kpi ${tone ? `admin-kpi--${tone}` : ''}`.trim()}>
+      <div className="admin-kpi__top">
+        <span>{label}</span>
+        <span className="admin-kpi__icon" aria-hidden="true">
+          <Icon />
+        </span>
+      </div>
+      <strong>
+        {moneyValue ? `৳${Number(value || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : <CountUp value={value} />}
+      </strong>
+      {hint ? <em>{hint}</em> : null}
+    </article>
   );
 }
 
@@ -58,54 +127,88 @@ export default function AdminDashboard() {
   const [data, setData] = useState(null);
   const [period, setPeriod] = useState('week');
   const [revenue, setRevenue] = useState(null);
-  const [orders, setOrders] = useState(null);
-  const [products, setProducts] = useState(null);
+  const [revenueLoading, setRevenueLoading] = useState(false);
+  const [topProducts, setTopProducts] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [activeStatus, setActiveStatus] = useState(null);
+  const tokens = useChartTokens();
+  const bootedRef = useRef(false);
 
+  // Core payload: KPIs, status breakdown, latest orders, inventory.
   const load = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
-      const [dashboard, revenueSeries, orderAnalytics, productAnalytics] = await Promise.all([
+      const [dashboard, products] = await Promise.all([
         fetchAdminDashboard(),
-        fetchRevenueSeries(period),
-        fetchOrderAnalytics(),
-        fetchProductAnalytics(),
+        fetchProductAnalytics().catch(() => null),
       ]);
       setData(dashboard);
-      setRevenue(revenueSeries);
-      setOrders(orderAnalytics);
-      setProducts(productAnalytics);
+      setTopProducts(products?.topProducts || []);
     } catch (err) {
-      setError(err.status === 401 ? 'Your session has expired. Please sign in again.' : err.message || 'Could not load the dashboard.');
+      setError(
+        err.status === 401
+          ? 'Your session has expired. Please sign in again.'
+          : err.message || 'Could not load the dashboard.'
+      );
     } finally {
       setLoading(false);
+      bootedRef.current = true;
     }
-  }, [period]);
+  }, []);
 
   useEffect(() => {
     load();
   }, [load]);
 
+  // Revenue series reloads on its own when the range changes - the KPI request
+  // above is never repeated just to change the chart window.
+  useEffect(() => {
+    let alive = true;
+    setRevenueLoading(true);
+    fetchRevenueSeries(period)
+      .then((result) => {
+        if (alive) setRevenue(result);
+      })
+      .catch(() => {
+        if (alive) setRevenue({ series: [] });
+      })
+      .finally(() => {
+        if (alive) setRevenueLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [period]);
+
   const kpis = data?.kpis || {};
+
+  const statusItems = useMemo(() => {
+    const items = data?.ordersByStatus?.items || [];
+    return items.map((row) => ({ ...row, total: Number(row.total) || 0, share: Number(row.share) || 0 }));
+  }, [data]);
+
+  const statusTotal = useMemo(
+    () => statusItems.reduce((sum, row) => sum + row.total, 0),
+    [statusItems]
+  );
+
+  const revenueData = useMemo(
+    () =>
+      (revenue?.series || []).map((row) => ({
+        period: row.period,
+        revenue: Number(row.revenue) || 0,
+        orders: Number(row.orders) || 0,
+      })),
+    [revenue]
+  );
+
   const latestOrders = data?.latestOrders || [];
   const lowStock = data?.lowStockProducts || [];
-
-  const revenueData = (revenue?.series || []).map((row) => ({
-    period: row.period,
-    revenue: Number(row.revenue),
-    orders: Number(row.orders),
-  }));
-  const statusData = (orders?.byStatus || [])
-    .map((row) => ({ name: row.status, value: Number(row.total) }))
-    .filter((row) => row.value > 0);
-  const categoryData = (products?.byCategory || [])
-    .map((row) => ({ name: row.category, value: Number(row.revenue), units: Number(row.units) }))
-    .filter((row) => row.value > 0);
-  const topProducts = products?.topProducts || [];
-
-  const noSalesData = revenueData.length === 0 && Number(kpis.totalOrders) === 0;
+  const outOfStock = data?.outOfStockProducts || [];
+  const hasOrders = Number(kpis.totalOrders) > 0;
+  const hasRevenueInPeriod = revenueData.some((row) => row.revenue > 0);
 
   return (
     <section className="admin-page">
@@ -116,224 +219,320 @@ export default function AdminDashboard() {
       <div className="admin-page__head">
         <div>
           <h1>Dashboard</h1>
-          <p className="muted">Store performance at a glance.</p>
+          <p>Store performance at a glance.</p>
         </div>
-        <button type="button" className="btn btn--ghost" onClick={load} disabled={loading}>
-          <FiRefreshCw size={14} /> {loading ? 'Refreshing…' : 'Refresh'}
+        <button
+          type="button"
+          className="btn btn-outline"
+          onClick={load}
+          disabled={loading}
+          aria-busy={loading}
+        >
+          <FiRefreshCw size={14} aria-hidden="true" /> {loading ? 'Refreshing…' : 'Refresh'}
         </button>
       </div>
 
       {error && (
-        <div className="alert alert--error">
-          {error}{' '}
-          <button type="button" className="admin-linkbtn" onClick={load}>
-            Try again
-          </button>
+        <div style={{ marginBottom: 'var(--sp-5)' }}>
+          <ErrorState title="Dashboard unavailable" text={error} onRetry={load} retrying={loading} />
         </div>
       )}
 
-      {loading && !data && <p className="muted admin-page__loading">Loading the dashboard…</p>}
-
-      {data && (
+      {loading && !data && !error && (
         <>
           <div className="admin-kpis">
-            <article className="admin-kpi">
-              <span>Revenue</span>
-              <strong>{formatPrice(kpis.totalRevenue)}</strong>
-              <em>{formatPrice(kpis.monthRevenue)} this month</em>
-            </article>
-            <article className="admin-kpi">
-              <span>Total orders</span>
-              <strong>{count(kpis.totalOrders)}</strong>
-              <em>{count(kpis.pendingOrders)} awaiting confirmation</em>
-            </article>
-            <article className="admin-kpi">
-              <span>Total customers</span>
-              <strong>{count(kpis.totalCustomers)}</strong>
-              <em>{count(kpis.deliveredOrders)} delivered</em>
-            </article>
-            <article className={`admin-kpi ${Number(kpis.outOfStockProducts) > 0 ? 'admin-kpi--alert' : ''}`}>
-              <span>Total products</span>
-              <strong>{count(kpis.totalProducts)}</strong>
-              <em>
-                {count(kpis.activeProducts)} active · {count(kpis.outOfStockProducts)} out of stock
-              </em>
-            </article>
+            {Array.from({ length: 4 }, (_, i) => (
+              <div className="admin-kpi" key={i} aria-hidden="true">
+                <Skeleton className="skeleton-text" width="52%" />
+                <Skeleton height={26} width="70%" />
+              </div>
+            ))}
+          </div>
+          <div className="admin-charts">
+            <div className="admin-panel">
+              <div className="admin-panel__head">
+                <Skeleton className="skeleton-title" width={120} />
+              </div>
+              <div className="admin-panel__body">
+                <Skeleton height={240} radius="var(--r-md)" />
+              </div>
+            </div>
+            <div className="admin-panel">
+              <div className="admin-panel__head">
+                <Skeleton className="skeleton-title" width={140} />
+              </div>
+              <div className="admin-panel__body">
+                <Skeleton height={240} radius="var(--r-md)" />
+              </div>
+            </div>
+          </div>
+          <div className="admin-panel">
+            <SkeletonTable rows={5} columns={5} />
+          </div>
+        </>
+      )}
+
+      {data && !error && (
+        <>
+          <div className="admin-kpis">
+            <MetricCard
+              icon={FiDollarSign}
+              label="Revenue"
+              value={kpis.totalRevenue}
+              moneyValue
+              hint={`${formatPrice(kpis.monthRevenue)} this month · ${formatPrice(kpis.todayRevenue)} today`}
+            />
+            <MetricCard
+              icon={FiShoppingBag}
+              label="Total orders"
+              value={kpis.totalOrders}
+              hint={`${count(kpis.pendingOrders)} pending · ${count(kpis.deliveredOrders)} delivered`}
+            />
+            <MetricCard
+              icon={FiUsers}
+              label="Customers"
+              value={kpis.totalCustomers}
+              hint="Registered accounts"
+            />
+            <MetricCard
+              icon={FiBox}
+              label="Products"
+              value={kpis.totalProducts}
+              hint={`${count(kpis.activeProducts)} active · ${count(kpis.lowStockProducts)} low stock`}
+              tone={Number(kpis.outOfStockProducts) > 0 ? 'danger' : undefined}
+            />
           </div>
 
-          {noSalesData ? (
-            <div className="admin-panel admin-empty">
-              <h2>No sales data available yet.</h2>
-              <p className="muted">Charts will appear as soon as your first order is placed.</p>
-            </div>
-          ) : (
-            <>
-              <div className="admin-charts">
-                <section className="admin-panel">
-                  <div className="admin-panel__head">
-                    <h2>
-                      <FiTrendingUp size={16} /> Sales
-                    </h2>
-                    <div className="admin-segbtn">
-                      {PERIODS.map((option) => (
-                        <button
-                          key={option.key}
-                          type="button"
-                          className={period === option.key ? 'is-active' : ''}
-                          onClick={() => setPeriod(option.key)}
-                          disabled={loading}
-                        >
-                          {option.label}
-                        </button>
-                      ))}
+          <div className="admin-charts">
+            <section className="admin-panel">
+              <div className="admin-panel__head">
+                <h2>
+                  <FiTrendingUp size={16} aria-hidden="true" /> Sales
+                </h2>
+                <div className="admin-segbtn" role="group" aria-label="Sales period">
+                  {PERIODS.map((option) => (
+                    <button
+                      key={option.key}
+                      type="button"
+                      className={period === option.key ? 'is-active' : ''}
+                      aria-pressed={period === option.key}
+                      onClick={() => setPeriod(option.key)}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="admin-panel__body">
+                <div className="admin-chart">
+                  {revenueLoading && !revenue ? (
+                    <Skeleton height="100%" radius="var(--r-md)" />
+                  ) : revenueData.length === 0 ? (
+                    <div className="admin-chart__empty">
+                      <EmptyState
+                        compact
+                        title="No orders in this range"
+                        text="Pick a wider range above, or check back once orders start coming in."
+                      />
+                    </div>
+                  ) : (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={revenueData} margin={{ top: 8, right: 8, left: -8, bottom: 0 }}>
+                        <defs>
+                          <linearGradient id="revenueFill" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor={tokens.accent} stopOpacity={0.34} />
+                            <stop offset="100%" stopColor={tokens.accent} stopOpacity={0.02} />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" stroke={tokens.grid} vertical={false} />
+                        <XAxis
+                          dataKey="period"
+                          tick={{ fontSize: 11, fill: tokens.axis }}
+                          tickLine={false}
+                          axisLine={false}
+                          minTickGap={16}
+                        />
+                        <YAxis
+                          tickFormatter={compactTick}
+                          tick={{ fontSize: 11, fill: tokens.axis }}
+                          tickLine={false}
+                          axisLine={false}
+                          width={58}
+                        />
+                        <Tooltip content={<ChartTooltip money />} cursor={{ stroke: tokens.grid }} />
+                        <Area
+                          type="monotone"
+                          dataKey="revenue"
+                          name="Revenue"
+                          stroke={tokens.accent}
+                          strokeWidth={2}
+                          fill="url(#revenueFill)"
+                          activeDot={{ r: 4 }}
+                        />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  )}
+                </div>
+                {revenueData.length > 0 && !hasRevenueInPeriod && (
+                  <p className="t-xs t-muted" style={{ marginTop: 'var(--sp-2)' }}>
+                    No revenue was recorded in this range, but the period is shown so you can confirm
+                    nothing is hidden.
+                  </p>
+                )}
+              </div>
+            </section>
+
+            <section className="admin-panel">
+              <div className="admin-panel__head">
+                <h2>Orders by status</h2>
+                <span className="badge badge-neutral">{count(statusTotal)} total</span>
+              </div>
+              <div className="admin-panel__body">
+                {statusTotal === 0 ? (
+                  <div className="admin-chart admin-chart--short">
+                    <div className="admin-chart__empty">
+                      <EmptyState
+                        compact
+                        title="No orders yet"
+                        text="Every status will appear here, including the ones sitting at zero, as soon as the first order lands."
+                      />
                     </div>
                   </div>
-                  <div className="admin-chart">
-                    {revenueData.length === 0 ? (
-                      <p className="muted admin-chart__empty">No sales in this period yet.</p>
-                    ) : (
-                      <ResponsiveContainer width="100%" height="100%">
-                        <AreaChart data={revenueData} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}>
-                          <defs>
-                            <linearGradient id="revenueFill" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="0%" stopColor="#6366f1" stopOpacity={0.35} />
-                              <stop offset="100%" stopColor="#6366f1" stopOpacity={0.02} />
-                            </linearGradient>
-                          </defs>
-                          <CartesianGrid strokeDasharray="3 3" stroke="rgba(15,23,42,.08)" vertical={false} />
-                          <XAxis dataKey="period" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
-                          <YAxis tickFormatter={moneyTick} tick={{ fontSize: 11 }} tickLine={false} axisLine={false} width={70} />
-                          <Tooltip content={<ChartTooltip />} />
-                          <Area
-                            type="monotone"
-                            dataKey="revenue"
-                            name="Revenue"
-                            stroke="#6366f1"
-                            strokeWidth={2}
-                            fill="url(#revenueFill)"
-                          />
-                        </AreaChart>
-                      </ResponsiveContainer>
-                    )}
-                  </div>
-                </section>
-
-                <section className="admin-panel">
-                  <div className="admin-panel__head">
-                    <h2>Orders by status</h2>
-                  </div>
-                  <div className="admin-chart">
-                    {statusData.length === 0 ? (
-                      <p className="muted admin-chart__empty">No orders yet.</p>
-                    ) : (
+                ) : (
+                  <div className="admin-donut">
+                    <div className="admin-donut__chart">
                       <ResponsiveContainer width="100%" height="100%">
                         <PieChart>
                           <Pie
-                            data={statusData}
-                            dataKey="value"
-                            nameKey="name"
-                            innerRadius={48}
-                            outerRadius={80}
+                            data={statusItems}
+                            dataKey="total"
+                            nameKey="label"
+                            innerRadius="58%"
+                            outerRadius="92%"
                             paddingAngle={2}
+                            stroke="none"
+                            onMouseEnter={(_, index) => setActiveStatus(statusItems[index]?.status || null)}
+                            onMouseLeave={() => setActiveStatus(null)}
                           >
-                            {statusData.map((entry, index) => (
+                            {statusItems.map((entry) => (
                               <Cell
-                                key={entry.name}
-                                fill={STATUS_COLORS[entry.name] || CATEGORY_COLORS[index % CATEGORY_COLORS.length]}
+                                key={entry.status}
+                                fill={tokens.status[entry.status] || tokens.accent}
+                                opacity={activeStatus && activeStatus !== entry.status ? 0.32 : 1}
                               />
                             ))}
                           </Pie>
                           <Tooltip content={<ChartTooltip />} />
+                          <text
+                            x="50%"
+                            y="46%"
+                            textAnchor="middle"
+                            dominantBaseline="middle"
+                            style={{ fill: 'var(--c-text)', fontSize: 24, fontWeight: 600 }}
+                          >
+                            {count(statusTotal)}
+                          </text>
+                          <text
+                            x="50%"
+                            y="60%"
+                            textAnchor="middle"
+                            dominantBaseline="middle"
+                            style={{ fill: 'var(--c-text-3)', fontSize: 11 }}
+                          >
+                            orders
+                          </text>
                         </PieChart>
                       </ResponsiveContainer>
-                    )}
-                  </div>
-                  <ul className="admin-legend">
-                    {statusData.map((entry, index) => (
-                      <li key={entry.name}>
-                        <span
-                          style={{
-                            background: STATUS_COLORS[entry.name] || CATEGORY_COLORS[index % CATEGORY_COLORS.length],
-                          }}
-                        />
-                        {entry.name} <strong>{count(entry.value)}</strong>
-                      </li>
-                    ))}
-                  </ul>
-                </section>
-              </div>
-
-              <div className="admin-charts">
-                <section className="admin-panel">
-                  <div className="admin-panel__head">
-                    <h2>Sales by category</h2>
-                  </div>
-                  <div className="admin-chart">
-                    {categoryData.length === 0 ? (
-                      <p className="muted admin-chart__empty">No category sales yet.</p>
-                    ) : (
-                      <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={categoryData} layout="vertical" margin={{ top: 4, right: 16, left: 8, bottom: 4 }}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="rgba(15,23,42,.08)" horizontal={false} />
-                          <XAxis type="number" tickFormatter={moneyTick} tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
-                          <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} width={110} />
-                          <Tooltip content={<ChartTooltip />} cursor={{ fill: 'rgba(99,102,241,.08)' }} />
-                          <Bar dataKey="revenue" name="Revenue" radius={[0, 6, 6, 0]}>
-                            {categoryData.map((entry, index) => (
-                              <Cell key={entry.name} fill={CATEGORY_COLORS[index % CATEGORY_COLORS.length]} />
-                            ))}
-                          </Bar>
-                        </BarChart>
-                      </ResponsiveContainer>
-                    )}
-                  </div>
-                </section>
-
-                <section className="admin-panel">
-                  <div className="admin-panel__head">
-                    <h2>Top products</h2>
-                  </div>
-                  {topProducts.length === 0 ? (
-                    <p className="muted">No product sales yet.</p>
-                  ) : (
-                    <div className="admin-table-wrap">
-                      <table className="admin-table admin-table--tight">
-                        <thead>
-                          <tr>
-                            <th>Product</th>
-                            <th>Units</th>
-                            <th>Revenue</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {topProducts.slice(0, 8).map((row) => (
-                            <tr key={`${row.product_id}-${row.product_name}`}>
-                              <td>
-                                <div className="admin-prod">
-                                  <span className="admin-prod__media admin-prod__media--sm">
-                                    {row.product_image ? (
-                                      <img src={row.product_image} alt={row.product_name} />
-                                    ) : (
-                                      <span className="admin-prod__noimg">—</span>
-                                    )}
-                                  </span>
-                                  <span className="admin-prod__meta">
-                                    <strong>{row.product_name}</strong>
-                                  </span>
-                                </div>
-                              </td>
-                              <td>{count(row.units)}</td>
-                              <td>{formatPrice(row.revenue)}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
                     </div>
-                  )}
-                </section>
+
+                    <ul className="admin-legend">
+                      {statusItems.map((entry) => (
+                        <li
+                          key={entry.status}
+                          className={
+                            activeStatus === entry.status
+                              ? 'is-active'
+                              : activeStatus
+                                ? 'is-dim'
+                                : ''
+                          }
+                          onMouseEnter={() => setActiveStatus(entry.status)}
+                          onMouseLeave={() => setActiveStatus(null)}
+                        >
+                          <span>
+                            <i
+                              style={{
+                                background: tokens.status[entry.status] || tokens.accent,
+                                width: 9,
+                                height: 9,
+                              }}
+                              aria-hidden="true"
+                            />
+                            {entry.label}
+                          </span>
+                          <em>
+                            {entry.share}% · <strong>{count(entry.total)}</strong>
+                          </em>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </div>
-            </>
-          )}
+            </section>
+          </div>
+
+          <section className="admin-panel" style={{ marginBottom: 'var(--sp-5)' }}>
+            <div className="admin-panel__head">
+              <h2>Top products</h2>
+              <Link to="/admin/products">Manage products</Link>
+            </div>
+            {topProducts === null ? (
+              <div className="admin-panel__body">
+                <SkeletonText lines={3} />
+              </div>
+            ) : topProducts.length === 0 ? (
+              <EmptyState
+                compact
+                title="No product sales yet"
+                text="Units sold and revenue by product will appear here once orders are fulfilled."
+              />
+            ) : (
+              <div className="admin-table-wrap">
+                <table className="admin-table admin-table--tight">
+                  <thead>
+                    <tr>
+                      <th scope="col">Product</th>
+                      <th scope="col" className="admin-table__num">Units</th>
+                      <th scope="col" className="admin-table__num">Revenue</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {topProducts.slice(0, 8).map((row) => (
+                      <tr key={`${row.product_id}-${row.product_name}`}>
+                        <td>
+                          <div className="admin-prod">
+                            <span className="admin-prod__media admin-prod__media--sm">
+                              {row.product_image ? (
+                                <img src={row.product_image} alt="" loading="lazy" />
+                              ) : (
+                                <FiBox aria-hidden="true" />
+                              )}
+                            </span>
+                            <span className="admin-prod__meta">
+                              <strong>{row.product_name}</strong>
+                            </span>
+                          </div>
+                        </td>
+                        <td className="admin-table__num">{count(row.units)}</td>
+                        <td className="admin-table__num">{formatPrice(row.revenue)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
 
           <div className="admin-grid">
             <section className="admin-panel">
@@ -342,60 +541,89 @@ export default function AdminDashboard() {
                 <Link to="/admin/orders">All orders</Link>
               </div>
               {latestOrders.length === 0 ? (
-                <p className="muted">No orders yet.</p>
+                <EmptyState
+                  compact
+                  title="No orders yet"
+                  text="New orders will show up here the moment a customer checks out."
+                  action={<Link className="btn btn-outline btn-sm" to="/admin/orders">Open orders</Link>}
+                />
               ) : (
                 <div className="admin-table-wrap">
                   <table className="admin-table">
                     <thead>
                       <tr>
-                        <th>Order</th>
-                        <th>Customer</th>
-                        <th>Total</th>
-                        <th>Status</th>
-                        <th>Date</th>
+                        <th scope="col">Order</th>
+                        <th scope="col">Customer</th>
+                        <th scope="col" className="admin-table__num">Total</th>
+                        <th scope="col">Status</th>
+                        <th scope="col">Date</th>
                       </tr>
                     </thead>
                     <tbody>
                       {latestOrders.map((order) => (
                         <tr key={order.id}>
-                          <td><strong>{order.order_number}</strong></td>
-                          <td>{order.customer_name}</td>
-                          <td>{formatPrice(order.total)}</td>
                           <td>
-                            <span className="admin-pill" data-status={order.order_status}>
-                              {order.order_status}
-                            </span>
+                            <Link to={`/admin/orders`} className="t-mono">
+                              {order.order_number}
+                            </Link>
                           </td>
-                          <td>{formatDate(order.created_at)}</td>
+                          <td>{order.customer_name}</td>
+                          <td className="admin-table__num">{formatPrice(order.total)}</td>
+                          <td>
+                            <StatusPill status={order.order_status} />
+                          </td>
+                          <td className="t-nowrap">{formatDate(order.created_at)}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
               )}
+              {hasOrders && latestOrders.length > 0 && (
+                <div className="admin-panel__foot">
+                  <span className="t-xs t-muted">
+                    Showing the {latestOrders.length} most recent of {count(kpis.totalOrders)} orders.
+                  </span>
+                </div>
+              )}
             </section>
 
             <section className="admin-panel">
               <div className="admin-panel__head">
-                <h2>Low stock</h2>
+                <h2>Inventory alerts</h2>
                 <Link to="/admin/products">Inventory</Link>
               </div>
-              {lowStock.length === 0 ? (
-                <p className="muted">Everything is comfortably in stock.</p>
-              ) : (
-                <ul className="admin-list">
-                  {lowStock.map((product) => (
-                    <li key={product.id}>
-                      <span>
-                        <FiAlertTriangle size={14} /> {product.name}
-                      </span>
-                      <strong className={product.stock <= 0 ? 'admin-list__out' : ''}>
-                        {product.stock <= 0 ? 'Out of stock' : `${product.stock} left`}
-                      </strong>
-                    </li>
-                  ))}
-                </ul>
-              )}
+              <div className="admin-panel__body">
+                {lowStock.length === 0 && outOfStock.length === 0 ? (
+                  <EmptyState
+                    compact
+                    title="Everything is in stock"
+                    text="No products are low on stock and none are out of stock right now."
+                  />
+                ) : (
+                  <ul className="admin-list">
+                    {outOfStock.slice(0, 5).map((product) => (
+                      <li key={`out-${product.id}`}>
+                        <span>
+                          <FiAlertTriangle aria-hidden="true" /> {product.name}
+                        </span>
+                        <strong className="admin-list__out t-danger">Out of stock</strong>
+                      </li>
+                    ))}
+                    {lowStock
+                      .filter((product) => product.stock > 0)
+                      .slice(0, 8)
+                      .map((product) => (
+                        <li key={`low-${product.id}`}>
+                          <span>
+                            <FiAlertTriangle aria-hidden="true" /> {product.name}
+                          </span>
+                          <strong className="admin-list__out">{product.stock} left</strong>
+                        </li>
+                      ))}
+                  </ul>
+                )}
+              </div>
             </section>
           </div>
         </>

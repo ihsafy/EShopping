@@ -4,12 +4,28 @@ import { Helmet } from 'react-helmet-async';
 import { FiEye, FiPackage } from 'react-icons/fi';
 import { fetchOrders } from '../services/orders';
 import OrderSteps, { StatusPill } from '../components/OrderStatus';
-import { formatPrice, formatDate } from '../utils/format';
+import { formatPrice, formatDate, formatPaymentMethod, formatPaymentStatus } from '../utils/format';
 
 const ZONE_LABELS = {
   inside_dhaka: 'Inside Dhaka',
   outside_dhaka: 'Outside Dhaka',
 };
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** Rough ETA derived from the order date (deliveries are quoted at ~3 days). */
+function estimateDelivery(order) {
+  if (order.order_status === 'cancelled') return null;
+  if (order.order_status === 'delivered') return { text: 'Delivered', done: true };
+  const created = new Date(order.created_at);
+  if (Number.isNaN(created.getTime())) return null;
+  const eta = new Date(created.getTime() + 3 * DAY_MS);
+  const sameDay = eta.toDateString() === new Date().toDateString();
+  return {
+    text: sameDay ? 'Estimated delivery: Today by 5 PM' : `Estimated delivery: ${formatDate(eta)}`,
+    done: false,
+  };
+}
 
 export default function TrackOrder() {
   const [payload, setPayload] = useState(null);
@@ -71,14 +87,21 @@ export default function TrackOrder() {
 
       {!loading && !error && orders.length > 0 && (
         <div className="track-list">
-          {orders.map((order) => (
+          {orders.map((order) => {
+            const eta = estimateDelivery(order);
+            return (
             <article key={order.id} className="track-card">
               <div className="track-card__head">
                 <div>
                   <h2 className="order-card__number">{order.order_number}</h2>
                   <p className="muted">Placed on {formatDate(order.created_at)}</p>
                 </div>
-                <StatusPill status={order.order_status} />
+                <div className="track-card__badges">
+                  {eta && (
+                    <span className={`badge badge--eta ${eta.done ? 'is-done' : ''}`}>{eta.text}</span>
+                  )}
+                  <StatusPill status={order.order_status} />
+                </div>
               </div>
 
               <OrderSteps status={order.order_status} />
@@ -95,7 +118,7 @@ export default function TrackOrder() {
                 <div>
                   <dt>Payment</dt>
                   <dd>
-                    {order.payment_method} / {order.payment_status}
+                    {formatPaymentMethod(order.payment_method)} / {formatPaymentStatus(order.payment_status)}
                   </dd>
                 </div>
                 <div>
@@ -110,7 +133,8 @@ export default function TrackOrder() {
                 </Link>
               </div>
             </article>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

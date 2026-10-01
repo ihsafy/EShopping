@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import toast from 'react-hot-toast';
-import { FiArrowLeft, FiLock, FiShoppingBag } from 'react-icons/fi';
+import { FiArrowLeft, FiCheckCircle, FiLock, FiShoppingBag } from 'react-icons/fi';
 import useAuth from '../context/useAuth';
 import { fetchOrders, previewCheckout, createOrder } from '../services/orders';
 import { formatPrice } from '../utils/format';
@@ -26,6 +26,9 @@ const EMPTY_FORM = {
   area: '',
   notes: '',
 };
+
+/** Coupon handed over by the promo notice bar for 1-click apply. */
+const PENDING_COUPON_KEY = 'eshopping:pending-coupon';
 
 const normalisePhone = (value) => {
   let phone = String(value || '').replace(/[\s\-()]/g, '');
@@ -175,35 +178,74 @@ export default function Checkout() {
   // The coupon control is deliberately not a <form>: it lives inside the
   // checkout form and a nested <form> would submit the page instead of
   // running this handler.
-  const applyCoupon = async (event) => {
-    event?.preventDefault?.();
-    const code = couponInput.trim();
-    if (!code || applying) return;
+  const applyCoupon = useCallback(
+    async (codeArg) => {
+      const code = String(codeArg || '').trim().toUpperCase();
+      if (!code || applying) return;
 
-    setApplying(true);
-    setCouponError('');
-    try {
-      const data = await previewCheckout({ deliveryZone: zone, couponCode: code });
-      if (!data?.coupon) throw new Error('That coupon could not be applied');
-      setSummary(data);
-      setCoupon(data.coupon.code);
-      setCouponInput(data.coupon.code);
-      toast.success(`Coupon ${data.coupon.code} applied`);
-    } catch (err) {
-      setCouponError(err.message || 'That coupon could not be applied.');
-      setCoupon('');
-      setCouponInput('');
-      toast.error(err.message || 'That coupon could not be applied.');
-    } finally {
-      setApplying(false);
-    }
-  };
+      setApplying(true);
+      setCouponError('');
+      try {
+        const data = await previewCheckout({ deliveryZone: zone, couponCode: code });
+        if (!data?.coupon) throw new Error('That coupon could not be applied');
+        setSummary(data);
+        setCoupon(data.coupon.code);
+        setCouponInput(data.coupon.code);
+        setCouponError('');
+        toast.success(`Coupon ${data.coupon.code} applied`);
+      } catch (err) {
+        setCouponError(err.message || 'That coupon could not be applied.');
+        setCoupon('');
+        setCouponInput('');
+        toast.error(err.message || 'That coupon could not be applied.');
+      } finally {
+        setApplying(false);
+      }
+    },
+    [zone, applying]
+  );
 
   const removeCoupon = () => {
     setCoupon('');
     setCouponInput('');
     setCouponError('');
   };
+
+  // 1-click apply: the promo bar hands a code over through a live event.
+  useEffect(() => {
+    const handler = (event) => {
+      const code = event?.detail?.code;
+      if (!code) return;
+      try {
+        window.localStorage.removeItem(PENDING_COUPON_KEY);
+      } catch {
+        /* ignore */
+      }
+      setCouponInput(String(code).toUpperCase());
+      applyCoupon(code);
+    };
+    window.addEventListener('eshopping:apply-coupon', handler);
+    return () => window.removeEventListener('eshopping:apply-coupon', handler);
+  }, [applyCoupon]);
+
+  // Apply a coupon staged before checkout mounted (e.g. tapped on the home page).
+  useEffect(() => {
+    if (loading) return;
+    let code = '';
+    try {
+      code = window.localStorage.getItem(PENDING_COUPON_KEY) || '';
+    } catch {
+      code = '';
+    }
+    if (!code) return;
+    try {
+      window.localStorage.removeItem(PENDING_COUPON_KEY);
+    } catch {
+      /* ignore */
+    }
+    setCouponInput(String(code).toUpperCase());
+    applyCoupon(code);
+  }, [loading, applyCoupon]);
 
   const submit = async (event) => {
     event.preventDefault();
@@ -502,38 +544,61 @@ export default function Checkout() {
             </div>
 
             <div className="checkout-coupon">
-              <input
-                type="text"
-                value={couponInput}
-                onChange={(event) => {
-                  setCouponInput(event.target.value.toUpperCase());
-                  setCouponError('');
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter') {
-                    event.preventDefault();
-                    applyCoupon();
-                  }
-                }}
-                placeholder="Coupon code"
-                aria-label="Coupon code"
-              />
-              <button
-                type="button"
-                className="btn btn--ghost"
-                onClick={applyCoupon}
-                disabled={applying || !couponInput.trim()}
-              >
-                {applying ? 'Checking…' : 'Apply'}
-              </button>
+              {coupon && !couponError ? (
+                <div className="coupon-applied" role="status">
+                  <FiCheckCircle className="coupon-applied__icon" aria-hidden="true" />
+                  <span className="coupon-applied__meta">
+                    <strong>{coupon}</strong>
+                    <span>
+                      Coupon applied
+                      {Number(summary?.discount) > 0
+                        ? ` · you save ${formatPrice(summary.discount)}`
+                        : ''}
+                    </span>
+                  </span>
+                  <button type="button" className="coupon-applied__remove" onClick={removeCoupon}>
+                    Remove
+                  </button>
+                </div>
+              ) : (
+                <div className="checkout-coupon__form">
+                  <input
+                    type="text"
+                    value={couponInput}
+                    onChange={(event) => {
+                      setCouponInput(event.target.value.toUpperCase());
+                      setCouponError('');
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        event.preventDefault();
+                        applyCoupon(couponInput);
+                      }
+                    }}
+                    placeholder="Coupon code"
+                    aria-label="Coupon code"
+                    autoComplete="off"
+                  />
+                  <button
+                    type="button"
+                    className="btn btn--ghost"
+                    onClick={() => applyCoupon(couponInput)}
+                    disabled={applying || !couponInput.trim()}
+                  >
+                    {applying ? (
+                      <>
+                        <span className="spinner" aria-hidden="true" /> Checking…
+                      </>
+                    ) : (
+                      'Apply'
+                    )}
+                  </button>
+                </div>
+              )}
             </div>
-            {couponError && <p className="checkout-coupon__error">{couponError}</p>}
-            {coupon && !couponError && (
-              <p className="checkout-coupon__applied">
-                Coupon <strong>{coupon}</strong> applied ·{' '}
-                <button type="button" onClick={removeCoupon}>
-                  Remove
-                </button>
+            {couponError && (
+              <p className="checkout-coupon__error" role="alert">
+                {couponError}
               </p>
             )}
 

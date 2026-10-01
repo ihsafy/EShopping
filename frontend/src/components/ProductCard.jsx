@@ -53,8 +53,10 @@ export default function ProductCard({ product }) {
   return (
     <article className="product-card">
       <Link to={`/product/${product.slug}`} className="product-card__media">
-        {discount > 0 && <span className="badge badge--discount">-{discount}%</span>}
-        <span className="badge badge--stock">{outOfStock ? 'Out of stock' : 'In stock'}</span>
+        <span className="product-card__flags">
+          {discount > 0 && <span className="badge badge--discount">-{discount}%</span>}
+          <span className="badge badge--stock">{outOfStock ? 'Out of stock' : 'In stock'}</span>
+        </span>
         {product.image ? (
           <img src={product.image} alt={product.name} loading="lazy" />
         ) : (

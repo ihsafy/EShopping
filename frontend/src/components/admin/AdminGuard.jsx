@@ -3,6 +3,7 @@ import { Helmet } from 'react-helmet-async';
 import { FiLock } from 'react-icons/fi';
 import useAuth from '../../context/useAuth';
 import AdminLayout from '../../layouts/AdminLayout';
+import Button from '../ui/Button';
 
 /** Session is still being restored: never bounce a valid session to login. */
 function Booting() {
@@ -34,12 +35,12 @@ function AccessDenied({ user, onSignOut }) {
           account. Administrator sign-in is restricted to staff accounts.
         </p>
         <div className="admin-deny__actions">
-          <button type="button" className="btn btn--primary" onClick={onSignOut}>
+          <Button variant="primary" onClick={onSignOut}>
             Sign out
-          </button>
-          <Link to="/" className="btn btn--ghost">
+          </Button>
+          <Button as={Link} to="/" variant="ghost">
             Back to home
-          </Link>
+          </Button>
         </div>
       </div>
     </div>
