@@ -55,4 +55,13 @@ const env = {
 
 env.isProd = env.nodeEnv === 'production';
 
+// CORS only accepts the origins in clientUrl when running in production, so a
+// deployment that leaves CLIENT_URL at its localhost default will reject every
+// POST (login, cart, checkout) with a 403 that looks nothing like a CORS bug.
+if (env.isProd && /localhost|127\.0\.0\.1|\[::1\]/i.test(env.clientUrl)) {
+  console.warn(
+    `[config] CLIENT_URL is "${env.clientUrl}" in production. Set it to the deployed origin, e.g. https://your-app.vercel.app, otherwise CORS will reject browser requests.`
+  );
+}
+
 module.exports = env;
