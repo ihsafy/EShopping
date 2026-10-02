@@ -124,13 +124,6 @@ const env = {
     folder: process.env.CLOUDINARY_FOLDER || 'eshopping',
   },
 
-  cloudinary: {
-    cloudName: process.env.CLOUDINARY_CLOUD_NAME || '',
-    apiKey: process.env.CLOUDINARY_API_KEY || '',
-    apiSecret: process.env.CLOUDINARY_API_SECRET || '',
-    folder: process.env.CLOUDINARY_FOLDER || 'eshopping',
-  },
-
   rateLimit: {
     windowMs: Number(process.env.RATE_LIMIT_WINDOW_MS || 15 * 60 * 1000),
     max: Number(process.env.RATE_LIMIT_MAX || 500),
