@@ -48,9 +48,13 @@ INSERT INTO `subcategories` (`id`, `category_id`, `name`, `slug`, `status`) VALU
   (18, 10, 'Eyewear',       'eyewear',        'active');
 
 -- ----------------------------------------------------------------------------
--- Customers (password for every account: Password123)
--- Admin (created by the seed, password same as the email address):
---   identifier: ihsafy2k21@gmail.com   password: ihsafy2k21@gmail.com
+-- Demo data. Customer accounts all share the throwaway password "Password123".
+--
+-- The admin row below is seeded with a known password so a fresh install has a
+-- working login. Before exposing any deployment publicly, run
+--   npm run db:admin
+-- with your own ADMIN_EMAIL / ADMIN_PASSWORD, or change the password from
+-- /admin, so this known credential no longer works.
 -- ----------------------------------------------------------------------------
 INSERT INTO `users` (`id`, `name`, `mobile`, `email`, `password_hash`, `role`, `status`, `address`, `city`, `area`, `created_at`) VALUES
   (1, 'Ayesha Rahman',   '01712345678', 'ayesha@example.com',  '$2a$12$29ZZOn3sS3jy5mry8AFJi.a5tqsAl8N3oF5xmlXdFPA2T3OwGvo5W', 'customer', 'active',   'House 12, Road 5, Banani',      'Dhaka',    'Banani',    '2026-01-12 10:15:00'),

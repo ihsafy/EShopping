@@ -44,23 +44,52 @@ const allowedOrigins = env.clientUrl
 // carry no Origin header - kept working.
 const DEV_LOCAL_ORIGIN = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i;
 
-const isAllowedOrigin = (origin) => {
+/**
+ * A request whose Origin matches the Host it was sent to is same-origin by
+ * definition, which is the normal case on Vercel: the rewrite sends /api to the
+ * backend on the same public domain the storefront is served from.
+ *
+ * Without this, a deployment whose CLIENT_URL was not updated to the exact
+ * deployed origin rejected every state-changing call (login, register, cart,
+ * checkout) with a 403 that looked nothing like a CORS misconfiguration, while
+ * plain page loads kept working - which is precisely the reported symptom.
+ * This is not a blanket wildcard: a genuinely cross-origin request still has to
+ * be listed in CLIENT_URL.
+ */
+const isSameOrigin = (req, origin) => {
+  const host = req.headers.host;
+  if (!host || !origin) return false;
+  try {
+    return new URL(origin).host.toLowerCase() === String(host).toLowerCase();
+  } catch (error) {
+    return false;
+  }
+};
+
+const isAllowedOrigin = (req, origin) => {
   if (!origin) return true; // curl, server-to-server, same-origin GETs
   if (allowedOrigins.includes(origin)) return true;
+  if (isSameOrigin(req, origin)) return true;
   return !env.isProd && DEV_LOCAL_ORIGIN.test(origin);
 };
 
+// cors() is given a delegate rather than plain options so the origin check can
+// see the request. The cors package's own `origin` callback only receives the
+// Origin string, never the req, so the same-origin comparison needs the delegate
+// form.
 app.use(
-  cors({
-    origin(origin, callback) {
-      if (isAllowedOrigin(origin)) return callback(null, true);
-      // Operational 403 (not a raw Error) so this reads as a policy decision
-      // instead of falling through the generic 500 handler.
-      return callback(
-        ApiError.forbidden('This origin is not allowed to call the API. Try again from the official site.')
-      );
-    },
-    credentials: true,
+  cors((req, callback) => {
+    callback(null, {
+      origin(origin, originCallback) {
+        if (isAllowedOrigin(req, origin)) return originCallback(null, true);
+        // Operational 403 (not a raw Error) so this reads as a policy decision
+        // instead of falling through the generic 500 handler.
+        return originCallback(
+          ApiError.forbidden('This origin is not allowed to call the API. Try again from the official site.')
+        );
+      },
+      credentials: true,
+    });
   })
 );
 
@@ -102,6 +131,9 @@ app.get('/api/health', async (req, res) => {
     version: require('../package.json').version,
     database,
     environment: env.nodeEnv,
+    // Variable NAMES only - never values - so a deployment with missing
+    // configuration can be diagnosed from the browser.
+    missingEnvVars: env.missingProdVars,
     timestamp: new Date().toISOString(),
   });
 });

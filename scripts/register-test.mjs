@@ -14,14 +14,16 @@ const check = (name, pass, detail = '') => {
  * registration this script asserts on reports "already exists".
  */
 async function clearProbeCustomers() {
+  // Credentials come from the environment so no admin login is committed.
+  const identifier = process.env.ADMIN_EMAIL || '';
+  const password = process.env.ADMIN_PASSWORD || '';
+  if (!identifier || !password) return 0;
+
   try {
     const login = await fetch(`${API}/auth/admin-login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        identifier: 'ihsafy2k21@gmail.com',
-        password: 'ihsafy2k21@gmail.com',
-      }),
+      body: JSON.stringify({ identifier, password }),
     }).then((r) => r.json());
     const token = login?.data?.token;
     if (!token) return 0;

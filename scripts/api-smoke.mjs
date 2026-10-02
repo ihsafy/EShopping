@@ -5,10 +5,15 @@
  * Reads/writes a temporary customer (TEMP.mobile) and temporary entities it
  * creates and deletes itself. Prints every failure with its status + message.
  */
-const API = 'http://localhost:5000/api';
+const API = process.env.SMOKE_API_URL || 'http://localhost:5000/api';
 
+// Admin credentials come from the environment (or backend/.env) so no login is
+// committed to the repository. The tests only ever run against a local API.
+const ADMIN = {
+  identifier: process.env.ADMIN_EMAIL || '',
+  password: process.env.ADMIN_PASSWORD || '',
+};
 const CUSTOMER = { mobile: '01712345678', password: 'Password123' };
-const ADMIN = { identifier: 'ihsafy2k21@gmail.com', password: 'ihsafy2k21@gmail.com' };
 const TEMP = {
   name: 'Smoke Test',
   mobile: '01799990011',
@@ -88,12 +93,16 @@ async function main() {
   await hit('GET /auth/me', 'GET', '/auth/me', { token: userToken });
   await hit('GET /auth/me unauth -> 401', 'GET', '/auth/me', { expect: [401] });
 
-  const adminLogin = await hit('POST /auth/admin-login', 'POST', '/auth/admin-login', { body: ADMIN });
-  adminToken = data(adminLogin)?.token || '';
-  await hit('POST /auth/admin-login wrong -> 401', 'POST', '/auth/admin-login', {
-    body: { identifier: ADMIN.identifier, password: 'wrong' },
-    expect: [401],
-  });
+  if (ADMIN.identifier && ADMIN.password) {
+    const adminLogin = await hit('POST /auth/admin-login', 'POST', '/auth/admin-login', { body: ADMIN });
+    adminToken = data(adminLogin)?.token || '';
+    await hit('POST /auth/admin-login wrong -> 401', 'POST', '/auth/admin-login', {
+      body: { identifier: ADMIN.identifier, password: 'wrong' },
+      expect: [401],
+    });
+  } else {
+    console.log('  ! ADMIN_EMAIL / ADMIN_PASSWORD not set - skipping the admin half of the smoke test.');
+  }
 
   await hit('POST /auth/register duplicate -> 409', 'POST', '/auth/register', {
     body: { name: 'Dup', mobile: CUSTOMER.mobile, password: 'Password123', confirmPassword: 'Password123' },

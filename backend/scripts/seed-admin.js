@@ -11,13 +11,16 @@ const { query, queryOne, pool } = require('../src/config/db');
 const BCRYPT_ROUNDS = 12;
 
 async function main() {
-  const email = (process.env.ADMIN_EMAIL || 'ihsafy2k21@gmail.com').trim().toLowerCase();
-  const password = process.env.ADMIN_PASSWORD || 'ihsafy2k21@gmail.com';
-  const name = process.env.ADMIN_NAME || 'IH Safy';
-  const mobile = process.env.ADMIN_MOBILE || '01724612320';
+  // No defaults on purpose. A fallback credential would end up committed in
+  // source control and would silently recreate the same known admin password on
+  // any machine that runs this script.
+  const email = (process.env.ADMIN_EMAIL || '').trim().toLowerCase();
+  const password = process.env.ADMIN_PASSWORD || '';
+  const name = process.env.ADMIN_NAME || 'Store Administrator';
+  const mobile = process.env.ADMIN_MOBILE || '';
 
-  if (!email || !password) {
-    console.error('✖ ADMIN_EMAIL and ADMIN_PASSWORD must be set in backend/.env');
+  if (!email || !password || !mobile) {
+    console.error('✖ ADMIN_EMAIL, ADMIN_PASSWORD and ADMIN_MOBILE must be set in backend/.env');
     process.exit(1);
   }
 

@@ -9,17 +9,10 @@
     "frontend": {
       "root": "frontend",
       "framework": "vite",
-      "bindings": [
-        {
-          "type": "service",
-          "service": "backend",
-          "format": "url",
-          "env": "BACKEND_URL"
-        }
-      ],
+      "outputDirectory": "dist",
       "rewrites": [
         {
-          "source": "/((?!assets/).*)",
+          "source": "/((?!assets/|favicon\\.svg).*)",
           "destination": "/index.html"
         }
       ]
