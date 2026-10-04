@@ -170,9 +170,11 @@ if (env.isProd && (!process.env.JWT_SECRET || env.jwt.secret.includes('dev_secre
 // deployment that leaves CLIENT_URL at its localhost default will reject every
 // POST (login, cart, checkout) with a 403 that looks nothing like a CORS bug.
 if (env.isProd && /localhost|127\.0\.0\.1|\[::1\]/i.test(env.clientUrl)) {
-  console.warn(
-    `[config] CLIENT_URL is "${env.clientUrl}" in production. Set it to the deployed origin, e.g. https://your-app.vercel.app, otherwise CORS will reject browser requests.`
+  const error = new Error(
+    'CLIENT_URL must be set to the deployed public origin in production (for example https://your-app.vercel.app). localhost is not reachable from Vercel.'
   );
+  error.code = 'CONFIG_MISSING_ENV';
+  throw error;
 }
 
 if (env.isProd && env.db.ssl && !env.db.ssl.ca) {
@@ -193,15 +195,19 @@ if (env.isProd && !env.usesCloudinary) {
 // with a clean 503 (and /api/health reports database=down), which is a far more
 // useful symptom than refusing to boot at all.
 if (env.isProd && !process.env.DB_HOST && !process.env.DATABASE_HOST) {
-  console.warn(
-    '[config] Neither DB_HOST nor DATABASE_HOST is set, so the database falls back to 127.0.0.1. A Vercel deployment cannot reach a database on the local machine - set DB_HOST to a remote MySQL/TiDB host.'
+  const error = new Error(
+    'Missing required production database configuration: set DB_HOST / DB_NAME / DB_USER / DB_PASSWORD in Vercel. localhost is not reachable from Vercel.'
   );
+  error.code = 'CONFIG_MISSING_ENV';
+  throw error;
 }
 
 if (env.isProd && env.missingProdVars.length) {
-  console.warn(
-    `[config] Not set in this deployment: ${env.missingProdVars.join(', ')} (names only, values are never logged).`
+  const error = new Error(
+    `Missing required production configuration: ${env.missingProdVars.join(', ')}. Set them in Vercel project environment variables.`
   );
+  error.code = 'CONFIG_MISSING_ENV';
+  throw error;
 }
 
 module.exports = env;
